@@ -3,10 +3,11 @@ import "https://deno.land/x/xhr@0.1.0/mod.ts";
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.49.8';
 
-const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-};
+import { corsHeaders, handleCorsRequest } from './cors.ts';
+import { convertPDFToDataUrl } from './pdf-processor.ts';
+import { uploadPDFToStorage } from './storage.ts';
+import { analyzeWithGPTVision } from './gpt-vision.ts';
+import { storeExtractionRecord, updateExtractionRecord } from './database.ts';
 
 const openAIApiKey = Deno.env.get('OPENAI_API_KEY');
 const supabaseUrl = Deno.env.get('SUPABASE_URL');
@@ -15,197 +16,10 @@ const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
 // Initialize Supabase client
 const supabase = createClient(supabaseUrl!, supabaseServiceKey!);
 
-// Convert PDF to images using a different approach
-async function convertPDFToImages(base64Data: string): Promise<string[]> {
-  console.log('Converting PDF to images using alternative method...');
-  
-  try {
-    // For now, we'll use a simpler approach that works in Deno
-    // Convert the PDF to a single image representation for GPT-4 Vision
-    
-    // Since PDF.js has issues in Deno, let's create a fallback approach
-    // We'll send the PDF data directly to OpenAI and let it handle the conversion
-    console.log('Using fallback method: sending PDF data directly to GPT-4 Vision');
-    
-    // Create a data URL for the PDF
-    const pdfDataUrl = `data:application/pdf;base64,${base64Data}`;
-    
-    // Return as single "image" (actually PDF data URL)
-    return [pdfDataUrl];
-    
-  } catch (error) {
-    console.error('PDF conversion failed:', error);
-    throw new Error(`Failed to process PDF: ${error.message}`);
-  }
-}
-
-// Upload PDF to Supabase Storage
-async function uploadPDFToStorage(base64Data: string, fileName: string): Promise<string> {
-  console.log('Uploading PDF to Supabase Storage...');
-  
-  try {
-    // Convert base64 to Uint8Array
-    const binaryString = atob(base64Data);
-    const bytes = new Uint8Array(binaryString.length);
-    for (let i = 0; i < binaryString.length; i++) {
-      bytes[i] = binaryString.charCodeAt(i);
-    }
-    
-    // Generate unique filename
-    const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
-    const uniqueFileName = `${timestamp}-${fileName}`;
-    
-    const { data, error } = await supabase.storage
-      .from('pdf-uploads')
-      .upload(uniqueFileName, bytes, {
-        contentType: 'application/pdf',
-        upsert: false
-      });
-    
-    if (error) {
-      throw error;
-    }
-    
-    console.log('PDF uploaded successfully:', data.path);
-    return data.path;
-    
-  } catch (error) {
-    console.error('Failed to upload PDF:', error);
-    throw new Error(`Failed to upload PDF: ${error.message}`);
-  }
-}
-
-// Analyze PDF with GPT-4 Vision
-async function analyzeWithGPTVision(pdfDataUrl: string): Promise<any> {
-  console.log('Analyzing PDF with GPT-4 Vision...');
-  
-  try {
-    const messages = [
-      {
-        role: 'system',
-        content: `You are an expert at extracting structured data from AWS billing documents and other cloud service bills.
-
-Extract the following information and return ONLY a valid JSON object:
-
-{
-  "totalCost": number (total amount - look for "Total", "Amount Due", "Balance", "Current Charges"),
-  "costChange": number (percentage change if mentioned, otherwise 0),
-  "billingPeriod": "YYYY-MM" (billing period from document),
-  "services": [
-    {
-      "name": "service name",
-      "cost": number,
-      "change": number (percentage change if available, otherwise 0),
-      "description": "brief description"
-    }
-  ],
-  "recommendations": [
-    "specific recommendations based on the billing data"
-  ]
-}
-
-RETURN ONLY THE JSON OBJECT, NO MARKDOWN OR ADDITIONAL TEXT.`
-      },
-      {
-        role: 'user',
-        content: [
-          {
-            type: 'text',
-            text: 'Please analyze this AWS billing document and extract the structured data. This is a PDF document containing billing information.'
-          },
-          {
-            type: 'image_url',
-            image_url: {
-              url: pdfDataUrl,
-              detail: 'high'
-            }
-          }
-        ]
-      }
-    ];
-
-    const response = await fetch('https://api.openai.com/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${openAIApiKey}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        model: 'gpt-4o',
-        messages: messages,
-        max_tokens: 2000,
-        temperature: 0.1,
-      }),
-    });
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error('OpenAI API error response:', errorText);
-      throw new Error(`OpenAI API error: ${response.status} - ${errorText}`);
-    }
-
-    const data = await response.json();
-    
-    if (!data.choices || !data.choices[0] || !data.choices[0].message) {
-      console.error('Invalid OpenAI response structure:', data);
-      throw new Error('Invalid response from OpenAI API');
-    }
-    
-    let extractedContent = data.choices[0].message.content.trim();
-    
-    // Clean up response
-    if (extractedContent.startsWith('```json')) {
-      extractedContent = extractedContent.replace(/^```json\s*/, '').replace(/\s*```$/, '');
-    } else if (extractedContent.startsWith('```')) {
-      extractedContent = extractedContent.replace(/^```\s*/, '').replace(/\s*```$/, '');
-    }
-    
-    // Parse the structured data
-    let parsedData;
-    try {
-      parsedData = JSON.parse(extractedContent);
-      
-      // Validate and set defaults
-      parsedData.totalCost = parsedData.totalCost || 0;
-      parsedData.costChange = parsedData.costChange || 0;
-      parsedData.billingPeriod = parsedData.billingPeriod || new Date().toISOString().substring(0, 7);
-      parsedData.services = parsedData.services || [];
-      parsedData.recommendations = parsedData.recommendations || [
-        'Consider analyzing your AWS usage patterns for potential cost optimization.',
-        'Review unused or underutilized resources regularly.',
-        'Set up billing alerts to monitor cost changes.'
-      ];
-      
-    } catch (parseError) {
-      console.error('Failed to parse GPT Vision response:', parseError);
-      console.log('Raw GPT Vision response:', extractedContent);
-      
-      // Fallback data
-      parsedData = {
-        totalCost: 0,
-        costChange: 0,
-        billingPeriod: new Date().toISOString().substring(0, 7),
-        services: [],
-        recommendations: [
-          'GPT Vision analysis encountered issues. Please ensure the PDF contains clear billing information.',
-          'Consider uploading a higher quality PDF for better accuracy.',
-          'You can download your bill directly from the AWS console for optimal results.'
-        ]
-      };
-    }
-    
-    return parsedData;
-    
-  } catch (error) {
-    console.error('GPT Vision analysis failed:', error);
-    throw new Error(`GPT Vision analysis failed: ${error.message}`);
-  }
-}
-
 serve(async (req) => {
   // Handle CORS preflight requests
   if (req.method === 'OPTIONS') {
-    return new Response(null, { headers: corsHeaders });
+    return handleCorsRequest();
   }
 
   try {
@@ -238,54 +52,23 @@ serve(async (req) => {
     }
 
     // Step 1: Upload PDF to Supabase Storage
-    const storagePath = await uploadPDFToStorage(fileData, fileName);
+    const storagePath = await uploadPDFToStorage(supabase, fileData, fileName);
     
-    // Step 2: Convert PDF for GPT-4 Vision (using fallback method)
-    const pdfDataUrls = await convertPDFToImages(fileData);
+    // Step 2: Convert PDF to data URL for GPT-4 Vision
+    const pdfDataUrl = await convertPDFToDataUrl(fileData);
     
     // Step 3: Store processing record in database
-    console.log('Storing processing record in Supabase...');
-    const { data: extractionRecord, error: dbError } = await supabase
-      .from('pdf_extractions')
-      .insert({
-        filename: fileName,
-        raw_text: `GPT-4 Vision processing of PDF document`,
-        file_size: Math.round(fileData.length * 0.75),
-        extraction_method: 'gpt4_vision',
-        processing_status: 'processing'
-      })
-      .select()
-      .single();
-
-    if (dbError) {
-      console.error('Failed to store extraction record:', dbError);
-      return new Response(JSON.stringify({ 
-        success: false,
-        error: 'Failed to store processing data' 
-      }), {
-        status: 500,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      });
-    }
-
-    console.log('Processing record stored with ID:', extractionRecord.id);
+    const extractionRecord = await storeExtractionRecord(
+      supabase, 
+      fileName, 
+      Math.round(fileData.length * 0.75)
+    );
 
     // Step 4: Analyze with GPT-4 Vision
-    const analyzedData = await analyzeWithGPTVision(pdfDataUrls[0]);
+    const analyzedData = await analyzeWithGPTVision(pdfDataUrl, openAIApiKey);
 
     // Step 5: Update the extraction record with processed data
-    const { error: updateError } = await supabase
-      .from('pdf_extractions')
-      .update({
-        processed_data: analyzedData,
-        processing_status: 'processed',
-        processed_at: new Date().toISOString()
-      })
-      .eq('id', extractionRecord.id);
-
-    if (updateError) {
-      console.error('Failed to update extraction record:', updateError);
-    }
+    await updateExtractionRecord(supabase, extractionRecord.id, analyzedData);
 
     console.log('GPT-4 Vision processing completed successfully');
     console.log('Final processed data:', analyzedData);
