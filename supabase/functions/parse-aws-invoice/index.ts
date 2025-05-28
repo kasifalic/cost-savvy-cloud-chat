@@ -15,11 +15,11 @@ const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
 // Initialize Supabase client
 const supabase = createClient(supabaseUrl!, supabaseServiceKey!);
 
-// Enhanced PDF text extraction with better binary filtering
+// Enhanced PDF text extraction with much better binary filtering
 async function extractTextFromPDF(base64Data: string): Promise<{ text: string; method: string }> {
   console.log('Starting enhanced PDF text extraction...');
   
-  // Method 1: Try PDF.co API
+  // Method 1: Try PDF.co API first
   try {
     console.log('Attempting PDF.co extraction...');
     const response = await fetch('https://api.pdf.co/v1/pdf/convert/to/text', {
@@ -30,160 +30,217 @@ async function extractTextFromPDF(base64Data: string): Promise<{ text: string; m
       },
       body: JSON.stringify({
         file: `data:application/pdf;base64,${base64Data}`,
-        pages: "1-5", // Focus on first few pages
+        pages: "1-10", // Extract more pages
         async: false,
-        inline: true
+        inline: true,
+        extractInvisibleText: false // Don't extract hidden text that might be garbled
       })
     });
 
     if (response.ok) {
       const data = await response.json();
-      if (data.body && data.body.length > 300) {
-        console.log('PDF.co extraction successful, text length:', data.body.length);
-        return { text: cleanExtractedText(data.body), method: 'pdf_co' };
+      if (data.body && data.body.length > 200) {
+        const cleanedText = cleanAndValidateText(data.body);
+        if (cleanedText.length > 100) {
+          console.log('PDF.co extraction successful, text length:', cleanedText.length);
+          return { text: cleanedText, method: 'pdf_co' };
+        }
       }
     }
   } catch (error) {
     console.log('PDF.co extraction failed:', error.message);
   }
 
-  // Method 2: Improved manual parsing with strict binary filtering
-  console.log('Using improved manual extraction...');
+  // Method 2: Try alternative PDF parsing service
+  try {
+    console.log('Attempting alternative PDF service...');
+    const response = await fetch('https://api.pdflayer.com/api/convert', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        access_key: 'demo', // Demo key - limited usage
+        document_url: `data:application/pdf;base64,${base64Data}`,
+        output_format: 'txt'
+      })
+    });
+
+    if (response.ok) {
+      const text = await response.text();
+      const cleanedText = cleanAndValidateText(text);
+      if (cleanedText.length > 100) {
+        console.log('Alternative service extraction successful, text length:', cleanedText.length);
+        return { text: cleanedText, method: 'pdflayer' };
+      }
+    }
+  } catch (error) {
+    console.log('Alternative PDF service failed:', error.message);
+  }
+
+  // Method 3: Enhanced manual parsing with much better filtering
+  console.log('Using enhanced manual extraction...');
   try {
     const pdfContent = atob(base64Data);
     let extractedText = '';
     
-    // More aggressive text extraction patterns focusing on readable content
-    const textExtractionMethods = [
-      // Method 1: Extract text between parentheses (most common in PDFs)
-      {
-        pattern: /\(([^)]*)\)/g,
-        name: 'parentheses'
-      },
-      // Method 2: Extract text after text positioning commands
-      {
-        pattern: /Tf\s+([^)]+)\)/g,
-        name: 'text_positioning'
-      },
-      // Method 3: Extract text between BT and ET operators
-      {
-        pattern: /BT\s+(.*?)\s+ET/gs,
-        name: 'text_blocks'
-      },
-      // Method 4: Extract readable strings after font commands
-      {
-        pattern: /\/F\d+\s+\d+\s+Tf[^)]*\(([^)]+)\)/g,
-        name: 'font_strings'
-      }
+    // Strategy 1: Look for text objects and streams
+    const textPatterns = [
+      // Text showing operators with better filtering
+      /Tj\s*\n?\s*([^)]+)/g,
+      /TJ\s*\n?\s*\[([^\]]+)\]/g,
+      // Text between parentheses (most common in PDFs)
+      /\(([^)]{3,})\)/g,
+      // Text after positioning commands
+      /\d+\s+\d+\s+Td\s*\(([^)]+)\)/g,
+      /\d+\s+TL\s*\(([^)]+)\)/g,
+      // Font and text combinations
+      /\/F\d+\s+\d+\s+Tf[^)]*\(([^)]{3,})\)/g,
     ];
 
-    let bestExtraction = { text: '', method: '' };
-
-    for (const method of textExtractionMethods) {
-      let methodText = '';
+    for (const pattern of textPatterns) {
       let match;
-      
-      while ((match = method.pattern.exec(pdfContent)) !== null) {
-        let text = match[1] || match[0];
-        
-        // Clean and validate the extracted text
-        text = text
-          .replace(/\\[nrtbf]/g, ' ') // Replace escape sequences
-          .replace(/\\(.)/g, '$1') // Remove escape backslashes
-          .replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F-\xFF]/g, ' ') // Remove control characters and high ASCII
-          .replace(/[^\x20-\x7E\s]/g, ' ') // Keep only printable ASCII and whitespace
-          .replace(/\s+/g, ' ') // Normalize whitespace
-          .trim();
-        
-        // Only include text that looks like actual content
-        if (text.length > 2 && /[a-zA-Z0-9]/.test(text) && !isLikelyBinary(text)) {
-          methodText += text + ' ';
+      while ((match = pattern.exec(pdfContent)) !== null) {
+        let text = match[1];
+        if (text && text.length > 2) {
+          // Clean and validate the text
+          text = cleanTextContent(text);
+          if (isValidText(text)) {
+            extractedText += text + ' ';
+          }
         }
-      }
-      
-      // Track the best extraction method
-      if (methodText.length > bestExtraction.text.length) {
-        bestExtraction = { text: methodText, method: method.name };
       }
     }
 
-    // If we still don't have enough text, try a more aggressive approach
-    if (bestExtraction.text.length < 500) {
-      console.log('Trying aggressive text extraction...');
+    // Strategy 2: Look for readable text blocks in streams
+    if (extractedText.length < 200) {
+      console.log('Trying stream-based extraction...');
+      const streamPattern = /stream\s*(.*?)\s*endstream/gs;
+      let streamMatch;
       
-      // Split by PDF delimiters and extract readable chunks
-      const chunks = pdfContent.split(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F-\x9F]/);
-      let aggressiveText = '';
+      while ((streamMatch = streamPattern.exec(pdfContent)) !== null) {
+        const streamContent = streamMatch[1];
+        // Look for readable text in streams
+        const readableChunks = extractReadableFromStream(streamContent);
+        extractedText += readableChunks;
+      }
+    }
+
+    // Strategy 3: Direct text search with aggressive filtering
+    if (extractedText.length < 200) {
+      console.log('Trying direct text search...');
+      // Split by common PDF delimiters and look for readable content
+      const chunks = pdfContent.split(/[\x00-\x08\x0B\x0C\x0E-\x1F]/);
       
       for (const chunk of chunks) {
-        const cleaned = chunk
-          .replace(/[^\x20-\x7E\s]/g, ' ')
-          .replace(/\s+/g, ' ')
-          .trim();
-        
-        // Look for chunks that contain meaningful content
-        if (cleaned.length > 8 && (
-          /\$[\d,]+\.?\d*/.test(cleaned) || // Dollar amounts
-          /\b(AWS|Amazon|EC2|S3|RDS|Lambda|CloudFront|Total|Invoice|Bill|Cost|Service|Usage|Charge)\b/i.test(cleaned) || // AWS terms
-          /\b(January|February|March|April|May|June|July|August|September|October|November|December)\b/i.test(cleaned) || // Months
-          /\b\d{4}[-\/]\d{1,2}[-\/]\d{1,2}\b/.test(cleaned) || // Dates
-          /[A-Z][a-z]+\s+[A-Z][a-z]+/.test(cleaned) // Proper nouns
-        ) && !isLikelyBinary(cleaned)) {
-          aggressiveText += cleaned + ' ';
+        const lines = chunk.split(/[\r\n]+/);
+        for (const line of lines) {
+          const cleaned = cleanTextContent(line);
+          if (isValidBusinessText(cleaned)) {
+            extractedText += cleaned + ' ';
+          }
         }
-      }
-      
-      if (aggressiveText.length > bestExtraction.text.length) {
-        bestExtraction = { text: aggressiveText, method: 'aggressive_extraction' };
       }
     }
 
-    const finalText = cleanExtractedText(bestExtraction.text);
-    console.log('Manual extraction completed, method:', bestExtraction.method, 'text length:', finalText.length);
+    const finalText = cleanAndValidateText(extractedText);
+    console.log('Manual extraction completed, text length:', finalText.length);
     
-    if (finalText.length < 100) {
-      throw new Error('Insufficient readable text extracted');
+    if (finalText.length < 50) {
+      throw new Error('Insufficient readable text extracted from PDF');
     }
     
-    return { text: finalText, method: `manual_${bestExtraction.method}` };
+    return { text: finalText, method: 'enhanced_manual' };
     
   } catch (error) {
     console.error('All extraction methods failed:', error);
-    throw new Error('Could not extract readable text from PDF. The PDF may be image-based or heavily encoded.');
+    throw new Error('Could not extract readable text from PDF. The PDF may be image-based, encrypted, or heavily encoded.');
   }
 }
 
-// Check if text is likely binary or encoded content
-function isLikelyBinary(text: string): boolean {
-  // Check for high ratio of non-printable or control characters
-  const nonPrintable = (text.match(/[^\x20-\x7E\s]/g) || []).length;
-  const ratio = nonPrintable / text.length;
+// Clean and validate text content
+function cleanTextContent(text: string): string {
+  if (!text) return '';
   
-  // Check for PDF-specific binary markers
-  const binaryMarkers = [
-    'endstream', 'endobj', 'stream', 'obj', '/Filter', '/FlateDecode', 
-    '/Length', '/Width', '/Height', '/BitsPerComponent', '/ColorSpace',
-    'xref', 'trailer', '%%EOF'
-  ];
-  
-  const hasBinaryMarkers = binaryMarkers.some(marker => text.includes(marker));
-  
-  // Text is likely binary if it has high non-printable ratio or contains PDF binary markers
-  return ratio > 0.3 || hasBinaryMarkers;
+  return text
+    .replace(/\\[nrtbf]/g, ' ') // Replace escape sequences
+    .replace(/\\(.)/g, '$1') // Remove escape backslashes
+    .replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F-\xFF]/g, ' ') // Remove control and high ASCII
+    .replace(/[^\x20-\x7E\s]/g, ' ') // Keep only printable ASCII and whitespace
+    .replace(/\s+/g, ' ') // Normalize whitespace
+    .trim();
 }
 
-// Clean and normalize extracted text with better filtering
-function cleanExtractedText(text: string): string {
-  return text
+// Check if text is valid and readable
+function isValidText(text: string): boolean {
+  if (!text || text.length < 3) return false;
+  
+  // Must contain at least some letters or numbers
+  if (!/[a-zA-Z0-9]/.test(text)) return false;
+  
+  // Reject if too many special characters
+  const specialCharRatio = (text.match(/[^a-zA-Z0-9\s.,;:!?()$%-]/g) || []).length / text.length;
+  if (specialCharRatio > 0.5) return false;
+  
+  // Reject PDF-specific binary markers
+  const binaryMarkers = ['endstream', 'endobj', 'stream', 'obj', '/Filter', '/Length', 'xref'];
+  if (binaryMarkers.some(marker => text.includes(marker))) return false;
+  
+  return true;
+}
+
+// Check if text looks like business/billing content
+function isValidBusinessText(text: string): boolean {
+  if (!isValidText(text)) return false;
+  
+  // Look for business/billing related content
+  const businessTerms = /\b(AWS|Amazon|EC2|S3|RDS|Lambda|CloudFront|Total|Invoice|Bill|Cost|Service|Usage|Charge|Account|Period|Date|Amount|USD|\$[\d,]+|January|February|March|April|May|June|July|August|September|October|November|December|\d{4}[-\/]\d{1,2}|\d{1,2}[-\/]\d{4})\b/i;
+  
+  // Prioritize text containing business terms or currency
+  if (businessTerms.test(text)) return true;
+  
+  // Accept general readable text if it's substantial
+  return text.length > 10 && /[a-zA-Z]{3,}/.test(text);
+}
+
+// Extract readable content from PDF streams
+function extractReadableFromStream(streamContent: string): string {
+  let readable = '';
+  
+  // Look for text-like patterns in decoded streams
+  const lines = streamContent.split(/[\r\n]+/);
+  
+  for (const line of lines) {
+    const cleaned = cleanTextContent(line);
+    
+    // Look for lines that might contain meaningful text
+    if (cleaned.length > 5 && (
+      /\$[\d,]+\.?\d*/.test(cleaned) || // Dollar amounts
+      /\b(AWS|Amazon|Total|Invoice|Service|Cost|Usage)\b/i.test(cleaned) || // AWS terms
+      /\b\d{4}[-\/]\d{1,2}[-\/]\d{1,2}\b/.test(cleaned) || // Dates
+      /[A-Z][a-z]{2,}\s+[A-Z][a-z]{2,}/.test(cleaned) // Proper names
+    )) {
+      readable += cleaned + ' ';
+    }
+  }
+  
+  return readable;
+}
+
+// Final cleaning and validation
+function cleanAndValidateText(text: string): string {
+  const cleaned = text
     .replace(/\s+/g, ' ') // Normalize whitespace
     .replace(/[^\x20-\x7E\s]/g, ' ') // Remove non-printable characters
     .replace(/\b(endstream|endobj|stream|obj|xref|trailer)\b/gi, ' ') // Remove PDF keywords
-    .replace(/\/[A-Z][a-zA-Z0-9]*/g, ' ') // Remove PDF commands like /Filter
-    .replace(/\d+\s+0\s+R/g, ' ') // Remove PDF references like "5 0 R"
+    .replace(/\/[A-Z][a-zA-Z0-9]*/g, ' ') // Remove PDF commands
+    .replace(/\d+\s+0\s+R/g, ' ') // Remove PDF references
     .replace(/<<[^>]*>>/g, ' ') // Remove PDF dictionaries
     .replace(/\n\s*\n/g, '\n') // Remove empty lines
-    .trim()
-    .substring(0, 30000); // Reasonable limit for processing
+    .trim();
+  
+  // Return a reasonable amount of text for processing
+  return cleaned.substring(0, 15000);
 }
 
 serve(async (req) => {
@@ -268,7 +325,13 @@ serve(async (req) => {
         messages: [
           {
             role: 'system',
-            content: `You are an expert at extracting structured data from AWS billing documents. The text may contain some noise from PDF extraction, so focus on identifying clear billing information.
+            content: `You are an expert at extracting structured data from AWS billing documents and other cloud service bills. 
+
+            CRITICAL INSTRUCTIONS:
+            1. If the text appears to be mostly garbled, binary data, or unreadable, return a response with totalCost: 0 and empty arrays, but include helpful recommendations.
+            2. Focus ONLY on clear, readable billing information
+            3. Ignore garbled text, special characters, and binary-like content
+            4. Look for dollar amounts, service names, dates, and recognizable billing terms
 
             Extract the following information and return ONLY a valid JSON object:
 
@@ -285,18 +348,15 @@ serve(async (req) => {
                 }
               ],
               "recommendations": [
-                "cost optimization recommendation based on services used"
+                "specific recommendations based on what you can extract"
               ]
             }
 
-            CRITICAL: Return ONLY the JSON object, no markdown or additional text.
-            If you can't find clear total costs, look for any dollar amounts and use the largest one.
-            Focus on AWS service names like EC2, S3, RDS, Lambda, CloudFront, etc.
-            Ignore PDF noise and binary content - focus only on readable billing information.`
+            RETURN ONLY THE JSON OBJECT, NO MARKDOWN OR ADDITIONAL TEXT.`
           },
           {
             role: 'user',
-            content: `Extract AWS billing data from this PDF text for file "${fileName}". Note that this text was extracted from a PDF and may contain some formatting noise - please focus on the readable billing information:
+            content: `Extract AWS billing data from this text. If the text is mostly unreadable/garbled, set costs to 0 and provide helpful recommendations about PDF quality:
 
 ${extractedText}`
           }
@@ -331,42 +391,26 @@ ${extractedText}`
       parsedData.billingPeriod = parsedData.billingPeriod || new Date().toISOString().substring(0, 7);
       parsedData.services = parsedData.services || [];
       parsedData.recommendations = parsedData.recommendations || [
-        'Review your AWS usage patterns for optimization opportunities',
-        'Consider Reserved Instances for predictable workloads',
-        'Enable detailed billing reports for better cost visibility'
+        'The PDF text extraction encountered issues. Try uploading a different PDF or check if the PDF is image-based.',
+        'Consider using text-based AWS bills rather than scanned images for better accuracy.',
+        'You can also try downloading your bill directly from the AWS console for better text extraction.'
       ];
       
     } catch (parseError) {
       console.error('Failed to parse OpenAI response:', parseError);
       console.log('Raw OpenAI response:', extractedContent);
       
-      // Enhanced fallback: try to extract basic info from raw text
-      const dollarAmounts = extractedText.match(/\$\s*([0-9,]+\.?[0-9]*)/g) || [];
-      const amounts = dollarAmounts.map(amount => 
-        parseFloat(amount.replace(/[\$,\s]/g, ''))
-      ).filter(num => !isNaN(num) && num > 0);
-      
-      // Try to find billing period
-      const monthMatch = extractedText.match(/\b(January|February|March|April|May|June|July|August|September|October|November|December)\s+(\d{4})\b/i);
-      const dateMatch = extractedText.match(/(\d{4})-(\d{1,2})/);
-      
-      let billingPeriod = new Date().toISOString().substring(0, 7);
-      if (monthMatch) {
-        const months = ['january', 'february', 'march', 'april', 'may', 'june', 'july', 'august', 'september', 'october', 'november', 'december'];
-        const monthIndex = months.indexOf(monthMatch[1].toLowerCase()) + 1;
-        billingPeriod = `${monthMatch[2]}-${monthIndex.toString().padStart(2, '0')}`;
-      } else if (dateMatch) {
-        billingPeriod = `${dateMatch[1]}-${dateMatch[2].padStart(2, '0')}`;
-      }
-      
+      // Enhanced fallback for garbled text
       parsedData = {
-        totalCost: amounts.length > 0 ? Math.max(...amounts) : 0,
+        totalCost: 0,
         costChange: 0,
-        billingPeriod: billingPeriod,
+        billingPeriod: new Date().toISOString().substring(0, 7),
         services: [],
         recommendations: [
-          'The PDF text extraction had some issues. Please try uploading a clearer PDF or check the extraction history for debugging.',
-          'Consider using AWS Cost Explorer for detailed billing analysis'
+          'PDF text extraction failed - the file may be image-based or encrypted.',
+          'Try uploading a text-based PDF downloaded directly from AWS console.',
+          'Consider using AWS Cost Explorer for detailed billing analysis.',
+          'Check if the PDF is corrupted or password-protected.'
         ]
       };
     }
