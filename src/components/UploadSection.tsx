@@ -66,10 +66,10 @@ const UploadSection = ({ onDataExtracted }: UploadSectionProps) => {
             <FileText className="h-12 w-12 text-teal-400" />
           </div>
         </div>
-        <h1 className="text-5xl font-bold mb-4 bg-gradient-to-r from-white via-teal-100 to-orange-200 bg-clip-text text-transparent">
+        <h1 className="text-5xl font-bold mb-4 bg-gradient-to-r from-black via-gray-800 to-gray-600 bg-clip-text text-transparent">
           Analyze Your AWS Bill
         </h1>
-        <p className="text-xl text-gray-300 max-w-2xl mx-auto leading-relaxed">
+        <p className="text-xl text-black max-w-2xl mx-auto leading-relaxed">
           Upload your AWS billing PDF and get AI-powered insights, cost optimization recommendations, and detailed analysis
         </p>
       </div>
@@ -96,8 +96,8 @@ const UploadSection = ({ onDataExtracted }: UploadSectionProps) => {
                 </div>
               </div>
               <div>
-                <h3 className="text-xl font-semibold text-white mb-2">Processing Your Bill</h3>
-                <p className="text-gray-300">AI is analyzing your AWS costs...</p>
+                <h3 className="text-xl font-semibold text-black mb-2">Processing Your Bill</h3>
+                <p className="text-black">AI is analyzing your AWS costs...</p>
                 <div className="mt-4 w-64 h-2 bg-white/10 rounded-full mx-auto overflow-hidden">
                   <div className="h-full bg-gradient-to-r from-teal-500 to-orange-600 rounded-full animate-pulse"></div>
                 </div>
@@ -109,14 +109,14 @@ const UploadSection = ({ onDataExtracted }: UploadSectionProps) => {
                 <div className="absolute inset-0 bg-emerald-500 rounded-full blur-lg opacity-50"></div>
                 <CheckCircle className="h-16 w-16 text-emerald-400 mx-auto relative" />
               </div>
-              <h3 className="text-2xl font-semibold text-white">Upload Successful!</h3>
-              <p className="text-gray-300">Your AWS bill has been analyzed. Check the dashboard for insights.</p>
+              <h3 className="text-2xl font-semibold text-black">Upload Successful!</h3>
+              <p className="text-black">Your AWS bill has been analyzed. Check the dashboard for insights.</p>
             </div>
           ) : uploadStatus === 'error' ? (
             <div className="space-y-4">
               <AlertCircle className="h-16 w-16 text-red-400 mx-auto" />
-              <h3 className="text-2xl font-semibold text-white">Upload Failed</h3>
-              <p className="text-gray-300">Please ensure you're uploading a valid PDF file.</p>
+              <h3 className="text-2xl font-semibold text-black">Upload Failed</h3>
+              <p className="text-black">Please ensure you're uploading a valid PDF file.</p>
             </div>
           ) : (
             <div className="space-y-6">
@@ -125,9 +125,9 @@ const UploadSection = ({ onDataExtracted }: UploadSectionProps) => {
                 <Upload className="h-16 w-16 text-teal-400 mx-auto relative" />
               </div>
               <div>
-                <h3 className="text-2xl font-semibold text-white mb-2">Drop your AWS bill here</h3>
-                <p className="text-gray-300 mb-6">or click to browse files</p>
-                <div className="space-y-2 text-sm text-gray-400">
+                <h3 className="text-2xl font-semibold text-black mb-2">Drop your AWS bill here</h3>
+                <p className="text-black mb-6">or click to browse files</p>
+                <div className="space-y-2 text-sm text-black">
                   <p>• Supports PDF files only</p>
                   <p>• Maximum file size: 10MB</p>
                   <p>• Your data is processed securely</p>
@@ -175,8 +175,8 @@ const UploadSection = ({ onDataExtracted }: UploadSectionProps) => {
             <div className="absolute inset-0 bg-gradient-to-r from-teal-500/5 to-orange-600/5 rounded-2xl blur-xl group-hover:blur-2xl transition-all duration-300"></div>
             <div className="relative backdrop-blur-xl bg-white/5 border border-white/10 rounded-2xl p-6 hover:bg-white/10 transition-all duration-300 group-hover:border-white/20">
               <feature.icon className="h-8 w-8 text-teal-400 mb-4" />
-              <h4 className="text-lg font-semibold text-white mb-2">{feature.title}</h4>
-              <p className="text-gray-300 text-sm">{feature.description}</p>
+              <h4 className="text-lg font-semibold text-black mb-2">{feature.title}</h4>
+              <p className="text-black text-sm">{feature.description}</p>
             </div>
           </div>
         ))}

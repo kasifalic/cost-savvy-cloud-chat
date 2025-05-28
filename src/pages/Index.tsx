@@ -9,10 +9,10 @@ import SettingsPanel from '../components/SettingsPanel';
 const Index = () => {
   const [activeTab, setActiveTab] = useState<'upload' | 'dashboard' | 'chat' | 'settings'>('upload');
   const [billData, setBillData] = useState(null);
-  const [apiKey, setApiKey] = useState('');
+  const [apiKey, setApiKey] = useState('your-openai-api-key-here'); // Pre-configured API key
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-teal-900/20 to-slate-900 relative overflow-hidden">
+    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-teal-900/20 to-slate-900 relative overflow-hidden text-black">
       {/* Animated background elements */}
       <div className="absolute inset-0 overflow-hidden pointer-events-none">
         <div className="absolute -top-40 -right-40 w-80 h-80 bg-orange-500/10 rounded-full blur-3xl animate-pulse"></div>
