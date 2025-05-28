@@ -1,7 +1,6 @@
 
 import "https://deno.land/x/xhr@0.1.0/mod.ts";
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.0.0';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -9,8 +8,6 @@ const corsHeaders = {
 };
 
 const openAIApiKey = Deno.env.get('OPENAI_API_KEY');
-const supabaseUrl = Deno.env.get('SUPABASE_URL');
-const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
 
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
@@ -18,33 +15,25 @@ serve(async (req) => {
   }
 
   try {
-    const { message, userId } = await req.json();
+    const { message, billData } = await req.json();
     
     if (!openAIApiKey) {
       throw new Error('OpenAI API key not configured');
     }
 
-    const supabase = createClient(supabaseUrl!, supabaseServiceKey!);
-
-    // Get user's latest AWS invoice data
-    const { data: invoices } = await supabase
-      .from('aws_invoices')
-      .select('*')
-      .eq('user_id', userId)
-      .eq('processing_status', 'completed')
-      .order('upload_date', { ascending: false })
-      .limit(1);
-
+    // Create context from bill data
     let contextData = '';
-    if (invoices && invoices.length > 0) {
-      const latestInvoice = invoices[0];
+    if (billData) {
       contextData = `
-User's AWS Bill Context:
-- Total Cost: $${latestInvoice.total_cost}
-- Billing Period: ${latestInvoice.billing_period}
-- Services: ${JSON.stringify(latestInvoice.services_data?.services || [])}
-- Previous Analysis: ${JSON.stringify(latestInvoice.services_data || {})}
+Current AWS Bill Context:
+- Total Cost: $${billData.totalCost || 'N/A'}
+- Billing Period: ${billData.billingPeriod || 'N/A'}
+- Cost Change: ${billData.costChange ? billData.costChange + '%' : 'N/A'}
+- Services: ${billData.services ? billData.services.map((s: any) => `${s.name}: $${s.cost}`).join(', ') : 'N/A'}
+- Previous Recommendations: ${billData.recommendations ? billData.recommendations.join('; ') : 'N/A'}
 `;
+    } else {
+      contextData = 'No specific bill data available, provide general AWS cost optimization advice.';
     }
 
     const response = await fetch('https://api.openai.com/v1/chat/completions', {
@@ -79,6 +68,10 @@ Be concise, practical, and focus on actionable advice. If the user doesn't have 
         temperature: 0.7,
       }),
     });
+
+    if (!response.ok) {
+      throw new Error(`OpenAI API error: ${response.status}`);
+    }
 
     const data = await response.json();
     const assistantMessage = data.choices[0].message.content;

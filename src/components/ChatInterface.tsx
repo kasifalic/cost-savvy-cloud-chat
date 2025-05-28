@@ -3,7 +3,6 @@ import React, { useState, useRef, useEffect } from 'react';
 import { Send, Bot, User, Sparkles } from 'lucide-react';
 import { Button } from './ui/button';
 import { supabase } from '../integrations/supabase/client';
-import { useAuth } from './AuthWrapper';
 
 interface Message {
   id: string;
@@ -28,7 +27,6 @@ const ChatInterface = ({ billData }: ChatInterfaceProps) => {
   const [inputMessage, setInputMessage] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
-  const { user } = useAuth();
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -56,7 +54,7 @@ const ChatInterface = ({ billData }: ChatInterfaceProps) => {
       const { data, error } = await supabase.functions.invoke('chat-aws-assistant', {
         body: {
           message: inputMessage,
-          userId: user?.id
+          billData: billData
         }
       });
 
