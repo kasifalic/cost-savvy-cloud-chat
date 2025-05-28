@@ -17,24 +17,44 @@ serve(async (req) => {
   try {
     const { message, billData } = await req.json();
     
+    console.log('Received message:', message);
+    console.log('Received billData:', JSON.stringify(billData, null, 2));
+    
     if (!openAIApiKey) {
       throw new Error('OpenAI API key not configured');
     }
 
-    // Create context from bill data
+    // Create detailed context from bill data
     let contextData = '';
-    if (billData) {
+    if (billData && billData.totalCost) {
+      const services = billData.services || [];
+      const recommendations = billData.recommendations || [];
+      
       contextData = `
-Current AWS Bill Context:
-- Total Cost: $${billData.totalCost || 'N/A'}
-- Billing Period: ${billData.billingPeriod || 'N/A'}
-- Cost Change: ${billData.costChange ? billData.costChange + '%' : 'N/A'}
-- Services: ${billData.services ? billData.services.map((s: any) => `${s.name}: $${s.cost}`).join(', ') : 'N/A'}
-- Previous Recommendations: ${billData.recommendations ? billData.recommendations.join('; ') : 'N/A'}
+CURRENT AWS BILL ANALYSIS:
+- Total Monthly Cost: $${billData.totalCost}
+- Billing Period: ${billData.billingPeriod || 'Current Period'}
+- Cost Change vs Previous Month: ${billData.costChange || 0}%
+
+SERVICES BREAKDOWN:
+${services.map((service: any) => 
+  `- ${service.name}: $${service.cost} (${service.change > 0 ? '+' : ''}${service.change}% change) - ${service.description}`
+).join('\n')}
+
+EXISTING RECOMMENDATIONS:
+${recommendations.map((rec: string, index: number) => `${index + 1}. ${rec}`).join('\n')}
+
+SUMMARY:
+- Total Services: ${services.length}
+- Highest Cost Service: ${services.length > 0 ? services.reduce((max: any, service: any) => service.cost > max.cost ? service : max).name : 'N/A'}
+- Services with Cost Increases: ${services.filter((s: any) => s.change > 0).length}
+- Services with Cost Decreases: ${services.filter((s: any) => s.change < 0).length}
 `;
     } else {
-      contextData = 'No specific bill data available, provide general AWS cost optimization advice.';
+      contextData = 'No specific bill data available. User has not uploaded their AWS bill yet.';
     }
+
+    console.log('Context data:', contextData);
 
     const response = await fetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
@@ -47,17 +67,20 @@ Current AWS Bill Context:
         messages: [
           {
             role: 'system',
-            content: `You are an expert AWS cost optimization assistant. You help users understand their AWS bills and provide actionable cost-saving recommendations.
+            content: `You are an expert AWS cost optimization assistant. You have access to the user's actual AWS billing data and can provide specific, actionable advice.
 
 ${contextData}
 
-Provide helpful, specific advice about:
-- AWS cost optimization strategies
-- Service usage patterns
-- Best practices for cost management
-- Specific recommendations based on their current usage
+Your role is to:
+1. Answer questions about their specific AWS costs and usage
+2. Provide personalized cost optimization recommendations
+3. Explain AWS services and pricing in simple terms
+4. Suggest specific actions they can take to reduce costs
+5. Help them understand their billing patterns and trends
 
-Be concise, practical, and focus on actionable advice. If the user doesn't have invoice data uploaded yet, encourage them to upload their AWS bill first.`
+Always reference their actual data when possible. Be specific about dollar amounts, service names, and cost changes. If they ask about a service not in their bill, let them know you don't see usage for that service in their current bill.
+
+Keep responses concise but informative. Use bullet points for lists and be actionable in your advice.`
           },
           {
             role: 'user',
@@ -70,11 +93,15 @@ Be concise, practical, and focus on actionable advice. If the user doesn't have 
     });
 
     if (!response.ok) {
+      const errorText = await response.text();
+      console.error('OpenAI API error:', errorText);
       throw new Error(`OpenAI API error: ${response.status}`);
     }
 
     const data = await response.json();
     const assistantMessage = data.choices[0].message.content;
+
+    console.log('Generated response:', assistantMessage);
 
     return new Response(JSON.stringify({ 
       message: assistantMessage 

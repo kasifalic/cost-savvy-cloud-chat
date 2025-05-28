@@ -1,53 +1,88 @@
 
 import React, { useState } from 'react';
-import Header from '../components/Header';
 import UploadSection from '../components/UploadSection';
 import Dashboard from '../components/Dashboard';
 import ChatInterface from '../components/ChatInterface';
-import SettingsPanel from '../components/SettingsPanel';
 
 const Index = () => {
-  const [activeTab, setActiveTab] = useState<'upload' | 'dashboard' | 'chat' | 'settings'>('upload');
-  const [billData, setBillData] = useState(null);
+  const [billData, setBillData] = useState<any>(null);
+  const [activeTab, setActiveTab] = useState<'upload' | 'dashboard' | 'chat'>('upload');
+
+  const handleDataExtracted = (data: any) => {
+    console.log('Data extracted in Index:', data);
+    setBillData(data);
+    setActiveTab('dashboard');
+  };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-teal-900/20 to-slate-900 relative overflow-hidden text-black">
-      {/* Animated background elements */}
-      <div className="absolute inset-0 overflow-hidden pointer-events-none">
-        <div className="absolute -top-40 -right-40 w-80 h-80 bg-orange-500/10 rounded-full blur-3xl animate-pulse"></div>
-        <div className="absolute -bottom-40 -left-40 w-80 h-80 bg-teal-500/10 rounded-full blur-3xl animate-pulse delay-1000"></div>
-        <div className="absolute top-1/2 left-1/2 w-96 h-96 bg-coral-500/5 rounded-full blur-3xl animate-pulse delay-500"></div>
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-100">
+      <div className="container mx-auto px-4 py-8">
+        {/* Navigation Tabs */}
+        {billData && (
+          <div className="flex justify-center mb-8">
+            <div className="relative">
+              <div className="absolute inset-0 bg-gradient-to-r from-teal-500/5 to-orange-600/5 rounded-2xl blur-xl"></div>
+              <div className="relative backdrop-blur-xl bg-white/5 border border-white/10 rounded-2xl p-2 flex gap-2">
+                <button
+                  onClick={() => setActiveTab('upload')}
+                  className={`px-6 py-3 rounded-xl text-sm font-medium transition-all duration-300 ${
+                    activeTab === 'upload'
+                      ? 'bg-gradient-to-r from-teal-500 to-orange-600 text-white shadow-lg'
+                      : 'text-black hover:bg-white/10'
+                  }`}
+                >
+                  Upload
+                </button>
+                <button
+                  onClick={() => setActiveTab('dashboard')}
+                  className={`px-6 py-3 rounded-xl text-sm font-medium transition-all duration-300 ${
+                    activeTab === 'dashboard'
+                      ? 'bg-gradient-to-r from-teal-500 to-orange-600 text-white shadow-lg'
+                      : 'text-black hover:bg-white/10'
+                  }`}
+                >
+                  Dashboard
+                </button>
+                <button
+                  onClick={() => setActiveTab('chat')}
+                  className={`px-6 py-3 rounded-xl text-sm font-medium transition-all duration-300 ${
+                    activeTab === 'chat'
+                      ? 'bg-gradient-to-r from-teal-500 to-orange-600 text-white shadow-lg'
+                      : 'text-black hover:bg-white/10'
+                  }`}
+                >
+                  AI Assistant
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Content */}
+        {activeTab === 'upload' && (
+          <UploadSection onDataExtracted={handleDataExtracted} />
+        )}
+        
+        {activeTab === 'dashboard' && billData && (
+          <Dashboard billData={billData} />
+        )}
+        
+        {activeTab === 'chat' && billData && (
+          <ChatInterface billData={billData} />
+        )}
+        
+        {!billData && activeTab !== 'upload' && (
+          <div className="text-center py-16">
+            <p className="text-black text-lg mb-4">Please upload your AWS bill first</p>
+            <button
+              onClick={() => setActiveTab('upload')}
+              className="bg-gradient-to-r from-teal-500 to-orange-600 hover:from-teal-600 hover:to-orange-700 text-white px-6 py-3 rounded-xl font-medium transition-all duration-300"
+            >
+              Go to Upload
+            </button>
+          </div>
+        )}
       </div>
-      
-      <Header activeTab={activeTab} setActiveTab={setActiveTab} />
-      
-      <main className="container mx-auto px-4 py-8 relative z-10">
-        <div className="transition-all duration-500 ease-out">
-          {activeTab === 'upload' && (
-            <div className="animate-fade-in">
-              <UploadSection onDataExtracted={setBillData} />
-            </div>
-          )}
-          
-          {activeTab === 'dashboard' && (
-            <div className="animate-fade-in">
-              <Dashboard billData={billData} />
-            </div>
-          )}
-          
-          {activeTab === 'chat' && (
-            <div className="animate-fade-in">
-              <ChatInterface billData={billData} />
-            </div>
-          )}
-          
-          {activeTab === 'settings' && (
-            <div className="animate-fade-in">
-              <SettingsPanel />
-            </div>
-          )}
-        </div>
-      </main>
     </div>
   );
 };

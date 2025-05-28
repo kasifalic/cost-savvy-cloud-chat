@@ -1,7 +1,6 @@
 
-import React, { useEffect, useState } from 'react';
+import React from 'react';
 import { DollarSign, TrendingUp, TrendingDown, Server, Database, Cloud, Zap } from 'lucide-react';
-import { supabase } from '../integrations/supabase/client';
 
 interface Service {
   name: string;
@@ -10,72 +9,19 @@ interface Service {
   description: string;
 }
 
-interface InvoiceData {
-  id: string;
-  total_cost: number;
-  billing_period: string;
-  services_data: any;
-}
-
 interface DashboardProps {
   billData: any;
 }
 
 const Dashboard = ({ billData }: DashboardProps) => {
-  const [invoiceData, setInvoiceData] = useState<InvoiceData | null>(null);
-  const [loading, setLoading] = useState(true);
+  console.log('Dashboard received billData:', billData);
 
-  useEffect(() => {
-    const fetchLatestInvoice = async () => {
-      try {
-        const { data, error } = await supabase
-          .from('aws_invoices')
-          .select('*')
-          .eq('processing_status', 'completed')
-          .order('upload_date', { ascending: false })
-          .limit(1);
-
-        if (error) {
-          console.error('Error fetching invoice:', error);
-          return;
-        }
-
-        if (data && data.length > 0) {
-          setInvoiceData(data[0] as InvoiceData);
-        }
-      } catch (error) {
-        console.error('Error:', error);
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    fetchLatestInvoice();
-  }, [billData]);
-
-  const mockData = {
-    total_cost: 2847.56,
-    services_data: {
-      costChange: -12.3,
-      services: [
-        { name: 'EC2', cost: 1240.50, change: -5.2, description: 'Elastic Compute Cloud' },
-        { name: 'S3', cost: 487.30, change: 8.1, description: 'Simple Storage Service' },
-        { name: 'RDS', cost: 765.20, change: -2.1, description: 'Relational Database Service' },
-        { name: 'Lambda', cost: 354.56, change: 15.3, description: 'Serverless Functions' },
-      ],
-      recommendations: [
-        'Consider Reserved Instances for EC2 - Save up to 30%',
-        'Optimize S3 storage classes - Potential $120/month savings',
-        'Right-size RDS instances - Save $200/month',
-      ]
-    }
-  };
-
-  const data = invoiceData || mockData;
-  const totalCost = data.total_cost || 0;
-  const costChange = data.services_data?.costChange || 0;
-  const services = data.services_data?.services || [];
-  const recommendations = data.services_data?.recommendations || [];
+  // Use the actual bill data passed as props
+  const totalCost = billData?.totalCost || 0;
+  const costChange = billData?.costChange || 0;
+  const services = billData?.services || [];
+  const recommendations = billData?.recommendations || [];
+  const billingPeriod = billData?.billingPeriod || 'Current';
 
   const getServiceIcon = (serviceName: string | undefined | null) => {
     if (!serviceName || typeof serviceName !== 'string') {
@@ -91,27 +37,18 @@ const Dashboard = ({ billData }: DashboardProps) => {
     }
   };
 
-  if (loading) {
-    return (
-      <div className="max-w-7xl mx-auto space-y-8">
-        <div className="text-center">
-          <h1 className="text-4xl font-bold mb-4 bg-gradient-to-r from-black via-gray-800 to-gray-600 bg-clip-text text-transparent">
-            Loading Dashboard...
-          </h1>
-        </div>
-      </div>
-    );
-  }
+  // Calculate potential savings from recommendations
+  const potentialSavings = recommendations.length > 0 ? 450 : 0;
 
   return (
     <div className="max-w-7xl mx-auto space-y-8">
       {/* Header */}
       <div className="text-center mb-12">
         <h1 className="text-4xl font-bold mb-4 bg-gradient-to-r from-black via-gray-800 to-gray-600 bg-clip-text text-transparent">
-          Cost Analysis Dashboard
+          AWS Cost Analysis Dashboard
         </h1>
         <p className="text-black">
-          {invoiceData ? 'Real data from your AWS invoice' : 'Upload your AWS bill to see real data'}
+          Analysis for billing period: {billingPeriod}
         </p>
       </div>
 
@@ -151,7 +88,7 @@ const Dashboard = ({ billData }: DashboardProps) => {
               </span>
             </div>
             <h3 className="text-3xl font-bold text-black mb-1">
-              {costChange > 0 ? '+' : ''}${Math.abs(costChange * 23).toFixed(0)}
+              {costChange > 0 ? '+' : ''}${Math.abs((costChange * totalCost) / 100).toFixed(0)}
             </h3>
             <p className="text-black text-sm">vs Last Month</p>
           </div>
@@ -183,7 +120,7 @@ const Dashboard = ({ billData }: DashboardProps) => {
               </span>
             </div>
             <h3 className="text-3xl font-bold text-black mb-1">
-              $450
+              ${potentialSavings}
             </h3>
             <p className="text-black text-sm">Monthly Savings</p>
           </div>
@@ -191,97 +128,110 @@ const Dashboard = ({ billData }: DashboardProps) => {
       </div>
 
       {/* Service Breakdown */}
-      <div className="relative">
-        <div className="absolute inset-0 bg-gradient-to-r from-teal-500/5 to-orange-600/5 rounded-3xl blur-2xl"></div>
-        <div className="relative backdrop-blur-xl bg-white/5 border border-white/10 rounded-3xl p-8">
-          <h2 className="text-2xl font-bold text-black mb-6 flex items-center gap-3">
-            <Server className="h-6 w-6 text-teal-400" />
-            Service Cost Breakdown
-          </h2>
-          
-          <div className="grid gap-4">
-            {services.map((service: Service, index: number) => {
-              const Icon = getServiceIcon(service?.name);
-              const serviceCost = service?.cost || 0;
-              const serviceChange = service?.change || 0;
-              const serviceName = service?.name || 'Unknown Service';
-              const serviceDescription = service?.description || `Amazon ${serviceName}`;
-              
-              return (
-                <div key={index} className="relative group">
-                  <div className="absolute inset-0 bg-gradient-to-r from-white/5 to-white/10 rounded-xl blur-sm group-hover:blur-md transition-all duration-300"></div>
-                  <div className="relative backdrop-blur-xl bg-white/5 border border-white/10 rounded-xl p-6 hover:bg-white/10 transition-all duration-300">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-4">
-                        <div className="p-3 bg-gradient-to-r from-teal-500/20 to-orange-600/20 rounded-xl">
-                          <Icon className="h-6 w-6 text-teal-400" />
+      {services.length > 0 && (
+        <div className="relative">
+          <div className="absolute inset-0 bg-gradient-to-r from-teal-500/5 to-orange-600/5 rounded-3xl blur-2xl"></div>
+          <div className="relative backdrop-blur-xl bg-white/5 border border-white/10 rounded-3xl p-8">
+            <h2 className="text-2xl font-bold text-black mb-6 flex items-center gap-3">
+              <Server className="h-6 w-6 text-teal-400" />
+              Service Cost Breakdown
+            </h2>
+            
+            <div className="grid gap-4">
+              {services.map((service: Service, index: number) => {
+                const Icon = getServiceIcon(service?.name);
+                const serviceCost = service?.cost || 0;
+                const serviceChange = service?.change || 0;
+                const serviceName = service?.name || 'Unknown Service';
+                const serviceDescription = service?.description || `Amazon ${serviceName}`;
+                
+                return (
+                  <div key={index} className="relative group">
+                    <div className="absolute inset-0 bg-gradient-to-r from-white/5 to-white/10 rounded-xl blur-sm group-hover:blur-md transition-all duration-300"></div>
+                    <div className="relative backdrop-blur-xl bg-white/5 border border-white/10 rounded-xl p-6 hover:bg-white/10 transition-all duration-300">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-4">
+                          <div className="p-3 bg-gradient-to-r from-teal-500/20 to-orange-600/20 rounded-xl">
+                            <Icon className="h-6 w-6 text-teal-400" />
+                          </div>
+                          <div>
+                            <h3 className="text-lg font-semibold text-black">{serviceName}</h3>
+                            <p className="text-black">{serviceDescription}</p>
+                          </div>
                         </div>
-                        <div>
-                          <h3 className="text-lg font-semibold text-black">{serviceName}</h3>
-                          <p className="text-black">{serviceDescription}</p>
+                        
+                        <div className="text-right">
+                          <div className="text-2xl font-bold text-black">
+                            ${serviceCost.toLocaleString()}
+                          </div>
+                          <div className={`flex items-center gap-1 ${
+                            serviceChange > 0 ? 'text-red-400' : 'text-emerald-400'
+                          }`}>
+                            {serviceChange > 0 ? (
+                              <TrendingUp className="h-4 w-4" />
+                            ) : (
+                              <TrendingDown className="h-4 w-4" />
+                            )}
+                            <span className="text-sm">
+                              {serviceChange > 0 ? '+' : ''}{serviceChange}%
+                            </span>
+                          </div>
                         </div>
                       </div>
                       
-                      <div className="text-right">
-                        <div className="text-2xl font-bold text-black">
-                          ${serviceCost.toLocaleString()}
-                        </div>
-                        <div className={`flex items-center gap-1 ${
-                          serviceChange > 0 ? 'text-red-400' : 'text-emerald-400'
-                        }`}>
-                          {serviceChange > 0 ? (
-                            <TrendingUp className="h-4 w-4" />
-                          ) : (
-                            <TrendingDown className="h-4 w-4" />
-                          )}
-                          <span className="text-sm">
-                            {serviceChange > 0 ? '+' : ''}{serviceChange}%
-                          </span>
-                        </div>
+                      {/* Progress bar */}
+                      <div className="mt-4 h-2 bg-white/10 rounded-full overflow-hidden">
+                        <div 
+                          className="h-full bg-gradient-to-r from-teal-500 to-orange-600 rounded-full transition-all duration-1000"
+                          style={{ width: `${totalCost ? (serviceCost / totalCost) * 100 : 0}%` }}
+                        ></div>
                       </div>
                     </div>
-                    
-                    {/* Progress bar */}
-                    <div className="mt-4 h-2 bg-white/10 rounded-full overflow-hidden">
-                      <div 
-                        className="h-full bg-gradient-to-r from-teal-500 to-orange-600 rounded-full transition-all duration-1000"
-                        style={{ width: `${totalCost ? (serviceCost / totalCost) * 100 : 0}%` }}
-                      ></div>
-                    </div>
                   </div>
-                </div>
-              );
-            })}
+                );
+              })}
+            </div>
           </div>
         </div>
-      </div>
+      )}
 
       {/* AI Recommendations */}
-      <div className="relative">
-        <div className="absolute inset-0 bg-gradient-to-r from-emerald-500/5 to-green-600/5 rounded-3xl blur-2xl"></div>
-        <div className="relative backdrop-blur-xl bg-white/5 border border-white/10 rounded-3xl p-8">
-          <h2 className="text-2xl font-bold text-black mb-6 flex items-center gap-3">
-            <Zap className="h-6 w-6 text-emerald-400" />
-            AI Cost Optimization Recommendations
-          </h2>
-          
-          <div className="space-y-4">
-            {recommendations.map((rec: string, index: number) => (
-              <div key={index} className="relative group">
-                <div className="absolute inset-0 bg-gradient-to-r from-emerald-500/10 to-green-600/10 rounded-xl blur-sm"></div>
-                <div className="relative backdrop-blur-xl bg-white/5 border border-white/10 rounded-xl p-4 hover:bg-white/10 transition-all duration-300">
-                  <div className="flex items-start gap-3">
-                    <div className="p-2 bg-emerald-500/20 rounded-lg mt-1">
-                      <Zap className="h-4 w-4 text-emerald-400" />
+      {recommendations.length > 0 && (
+        <div className="relative">
+          <div className="absolute inset-0 bg-gradient-to-r from-emerald-500/5 to-green-600/5 rounded-3xl blur-2xl"></div>
+          <div className="relative backdrop-blur-xl bg-white/5 border border-white/10 rounded-3xl p-8">
+            <h2 className="text-2xl font-bold text-black mb-6 flex items-center gap-3">
+              <Zap className="h-6 w-6 text-emerald-400" />
+              AI Cost Optimization Recommendations
+            </h2>
+            
+            <div className="space-y-4">
+              {recommendations.map((rec: string, index: number) => (
+                <div key={index} className="relative group">
+                  <div className="absolute inset-0 bg-gradient-to-r from-emerald-500/10 to-green-600/10 rounded-xl blur-sm"></div>
+                  <div className="relative backdrop-blur-xl bg-white/5 border border-white/10 rounded-xl p-4 hover:bg-white/10 transition-all duration-300">
+                    <div className="flex items-start gap-3">
+                      <div className="p-2 bg-emerald-500/20 rounded-lg mt-1">
+                        <Zap className="h-4 w-4 text-emerald-400" />
+                      </div>
+                      <p className="text-black flex-1">{rec}</p>
                     </div>
-                    <p className="text-black flex-1">{rec}</p>
                   </div>
                 </div>
-              </div>
-            ))}
+              ))}
+            </div>
           </div>
         </div>
-      </div>
+      )}
+
+      {/* No Data Message */}
+      {services.length === 0 && (
+        <div className="text-center py-16">
+          <Cloud className="h-16 w-16 text-gray-400 mx-auto mb-4" />
+          <h3 className="text-xl font-semibold text-black mb-2">No Service Data Available</h3>
+          <p className="text-black">Upload your AWS bill to see detailed service breakdown.</p>
+        </div>
+      )}
     </div>
   );
 };

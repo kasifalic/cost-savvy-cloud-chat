@@ -1,6 +1,6 @@
 
 import React, { useState, useRef, useEffect } from 'react';
-import { Send, Bot, User, Sparkles } from 'lucide-react';
+import { Send, Bot, User, Sparkles, FileText } from 'lucide-react';
 import { Button } from './ui/button';
 import { ScrollArea } from './ui/scroll-area';
 import { supabase } from '../integrations/supabase/client';
@@ -20,7 +20,9 @@ const ChatInterface = ({ billData }: ChatInterfaceProps) => {
   const [messages, setMessages] = useState<Message[]>([
     {
       id: '1',
-      content: "Hi! I'm your AWS cost optimization assistant. Upload your AWS bill first, then ask me anything about your costs, usage patterns, or how to save money on your AWS services.",
+      content: billData 
+        ? `Hi! I have analyzed your AWS bill for ${billData.billingPeriod || 'this period'}. Your total cost is $${billData.totalCost?.toLocaleString() || 'N/A'} with ${billData.services?.length || 0} services. I can help you understand your costs, analyze usage patterns, and suggest optimizations. What would you like to know?`
+        : "Hi! I'm your AWS cost optimization assistant. Upload your AWS bill first, then ask me anything about your costs, usage patterns, or how to save money on your AWS services.",
       sender: 'assistant',
       timestamp: new Date(),
     },
@@ -37,6 +39,20 @@ const ChatInterface = ({ billData }: ChatInterfaceProps) => {
     scrollToBottom();
   }, [messages]);
 
+  // Update welcome message when billData changes
+  useEffect(() => {
+    if (billData) {
+      setMessages([
+        {
+          id: '1',
+          content: `Hi! I have analyzed your AWS bill for ${billData.billingPeriod || 'this period'}. Your total cost is $${billData.totalCost?.toLocaleString() || 'N/A'} with ${billData.services?.length || 0} services. I can help you understand your costs, analyze usage patterns, and suggest optimizations. What would you like to know?`,
+          sender: 'assistant',
+          timestamp: new Date(),
+        },
+      ]);
+    }
+  }, [billData]);
+
   const handleSendMessage = async () => {
     if (!inputMessage.trim() || isLoading) return;
 
@@ -52,6 +68,8 @@ const ChatInterface = ({ billData }: ChatInterfaceProps) => {
     setIsLoading(true);
 
     try {
+      console.log('Sending message with billData:', billData);
+      
       const { data, error } = await supabase.functions.invoke('chat-aws-assistant', {
         body: {
           message: inputMessage,
@@ -75,7 +93,9 @@ const ChatInterface = ({ billData }: ChatInterfaceProps) => {
       console.error('Error sending message:', error);
       const errorMessage: Message = {
         id: (Date.now() + 1).toString(),
-        content: 'Sorry, I encountered an error. Please make sure you have uploaded your AWS bill and try again.',
+        content: billData 
+          ? 'Sorry, I encountered an error. Please try again.' 
+          : 'Sorry, I encountered an error. Please make sure you have uploaded your AWS bill and try again.',
         sender: 'assistant',
         timestamp: new Date(),
       };
@@ -102,10 +122,20 @@ const ChatInterface = ({ billData }: ChatInterfaceProps) => {
             <div className="p-3 bg-gradient-to-r from-teal-500/20 to-orange-600/20 rounded-xl">
               <Bot className="h-6 w-6 text-teal-400" />
             </div>
-            <div>
+            <div className="flex-1">
               <h2 className="text-2xl font-bold text-black">AWS Cost Assistant</h2>
-              <p className="text-black">Ask me anything about your AWS costs and optimization strategies</p>
+              <p className="text-black">
+                {billData 
+                  ? `Analyzing your bill: $${billData.totalCost?.toLocaleString() || 'N/A'} (${billData.services?.length || 0} services)`
+                  : "Upload your AWS bill to get personalized insights"
+                }
+              </p>
             </div>
+            {billData && (
+              <div className="p-2 bg-emerald-500/20 rounded-lg">
+                <FileText className="h-5 w-5 text-emerald-400" />
+              </div>
+            )}
           </div>
         </div>
       </div>
@@ -162,7 +192,7 @@ const ChatInterface = ({ billData }: ChatInterfaceProps) => {
                   <div className="bg-white/10 border border-white/20 p-4 rounded-2xl">
                     <div className="flex items-center gap-2">
                       <Sparkles className="h-4 w-4 text-teal-400 animate-pulse" />
-                      <span className="text-black text-sm">Thinking...</span>
+                      <span className="text-black text-sm">Analyzing your bill...</span>
                     </div>
                   </div>
                 </div>
@@ -183,7 +213,10 @@ const ChatInterface = ({ billData }: ChatInterfaceProps) => {
               value={inputMessage}
               onChange={(e) => setInputMessage(e.target.value)}
               onKeyPress={handleKeyPress}
-              placeholder="Ask me about your AWS costs, optimization strategies, or specific services..."
+              placeholder={billData 
+                ? "Ask me about your AWS costs, specific services, or optimization strategies..."
+                : "Upload your AWS bill first to get personalized assistance..."
+              }
               className="flex-1 bg-white/10 border border-white/20 rounded-xl p-3 text-black placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent resize-none"
               rows={2}
               disabled={isLoading}
