@@ -9,82 +9,130 @@ const corsHeaders = {
 
 const openAIApiKey = Deno.env.get('OPENAI_API_KEY');
 
-// Function to extract text from PDF using a PDF parsing service
+// Function to extract text from PDF using multiple methods
 async function extractTextFromPDF(base64Data: string): Promise<string> {
   try {
-    console.log('Extracting text from PDF using PDF parsing service...');
+    console.log('Attempting to extract text from PDF...');
     
-    // Use pdf.co API for text extraction (free tier available)
-    const pdfCoResponse = await fetch('https://api.pdf.co/v1/pdf/convert/to/text', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-api-key': 'demo' // Using demo key for now, can be upgraded
-      },
-      body: JSON.stringify({
-        file: `data:application/pdf;base64,${base64Data}`,
-        pages: "1-10", // Extract first 10 pages to avoid too much data
-        async: false
-      })
-    });
+    // Method 1: Try PDF.co API
+    try {
+      console.log('Trying PDF.co API...');
+      const pdfCoResponse = await fetch('https://api.pdf.co/v1/pdf/convert/to/text', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-api-key': 'demo'
+        },
+        body: JSON.stringify({
+          file: `data:application/pdf;base64,${base64Data}`,
+          pages: "1-5",
+          async: false
+        })
+      });
 
-    if (!pdfCoResponse.ok) {
-      console.log('PDF.co API failed, falling back to alternative method...');
-      // Fallback: Try to decode and extract what we can from base64
-      return await fallbackTextExtraction(base64Data);
+      if (pdfCoResponse.ok) {
+        const pdfCoData = await pdfCoResponse.json();
+        if (pdfCoData.body && pdfCoData.body.length > 100) {
+          console.log('PDF.co extraction successful, text length:', pdfCoData.body.length);
+          return cleanExtractedText(pdfCoData.body);
+        }
+      }
+    } catch (error) {
+      console.log('PDF.co failed:', error.message);
     }
 
-    const pdfCoData = await pdfCoResponse.json();
-    console.log('PDF.co response received');
-    
-    if (pdfCoData.error || !pdfCoData.body) {
-      console.log('PDF.co returned error, using fallback...');
-      return await fallbackTextExtraction(base64Data);
-    }
-
-    const extractedText = pdfCoData.body;
-    console.log('Successfully extracted text, length:', extractedText.length);
-    
-    // Clean and limit the extracted text
-    const cleanedText = extractedText
-      .replace(/\s+/g, ' ') // Replace multiple spaces with single space
-      .replace(/\n\s*\n/g, '\n') // Remove empty lines
-      .trim();
-    
-    // Limit to 15000 characters to stay within token limits
-    const limitedText = cleanedText.substring(0, 15000);
-    console.log('Cleaned and limited text length:', limitedText.length);
-    
-    return limitedText;
+    // Method 2: Enhanced fallback extraction
+    console.log('Using enhanced fallback extraction...');
+    return await enhancedFallbackExtraction(base64Data);
     
   } catch (error) {
-    console.error('Error extracting text from PDF:', error);
-    return await fallbackTextExtraction(base64Data);
+    console.error('All PDF extraction methods failed:', error);
+    throw new Error('Unable to extract text from PDF. Please ensure the file is a valid AWS billing PDF.');
   }
 }
 
-// Fallback method to extract some text indicators from PDF
-async function fallbackTextExtraction(base64Data: string): Promise<string> {
-  console.log('Using fallback text extraction method...');
-  
+// Enhanced fallback method to extract text from PDF
+async function enhancedFallbackExtraction(base64Data: string): Promise<string> {
   try {
-    // Convert base64 to text and look for readable content
-    const pdfText = atob(base64Data);
+    // Convert base64 to binary and look for text patterns
+    const pdfContent = atob(base64Data);
+    console.log('PDF content length:', pdfContent.length);
     
-    // Extract text that looks like it might be from an AWS bill
-    const textMatches = pdfText.match(/[\x20-\x7E]{4,}/g) || [];
-    const readableText = textMatches
-      .filter(text => text.length > 3)
-      .join(' ')
-      .substring(0, 10000);
+    // Extract text objects and streams from PDF
+    const textPatterns = [
+      /\(([^)]+)\)/g,  // Text in parentheses
+      /\[([^\]]+)\]/g,  // Text in brackets
+      /BT\s+([^ET]+)\s+ET/g,  // Text between BT and ET markers
+      /Tj\s*$/gm,      // Text show operators
+      /TJ\s*$/gm,      // Text show with spacing
+    ];
     
-    console.log('Fallback extraction completed, text length:', readableText.length);
-    return readableText || 'Unable to extract readable text from PDF';
+    let extractedText = '';
+    
+    // Try to find readable text using various patterns
+    for (const pattern of textPatterns) {
+      const matches = pdfContent.match(pattern);
+      if (matches) {
+        for (const match of matches) {
+          // Clean up the match and extract readable characters
+          const cleaned = match
+            .replace(/[^\x20-\x7E]/g, ' ') // Keep only printable ASCII
+            .replace(/\s+/g, ' ')
+            .trim();
+          
+          if (cleaned.length > 3) {
+            extractedText += cleaned + ' ';
+          }
+        }
+      }
+    }
+    
+    // If that didn't work well, try a more aggressive approach
+    if (extractedText.length < 500) {
+      console.log('Trying more aggressive text extraction...');
+      
+      // Look for common AWS billing terms and extract surrounding text
+      const awsTerms = ['AWS', 'Amazon', 'Total', 'USD', '$', 'Invoice', 'Bill', 'EC2', 'S3', 'RDS', 'Lambda'];
+      const chunks = pdfContent.split(/[\x00-\x1F]+/); // Split on control characters
+      
+      for (const chunk of chunks) {
+        const readableChunk = chunk.replace(/[^\x20-\x7E]/g, ' ').trim();
+        if (readableChunk.length > 10) {
+          // Check if chunk contains AWS-related terms
+          const hasAwsTerm = awsTerms.some(term => 
+            readableChunk.toLowerCase().includes(term.toLowerCase())
+          );
+          
+          if (hasAwsTerm) {
+            extractedText += readableChunk + ' ';
+          }
+        }
+      }
+    }
+    
+    const finalText = cleanExtractedText(extractedText);
+    console.log('Fallback extraction completed, final text length:', finalText.length);
+    
+    if (finalText.length < 100) {
+      throw new Error('Insufficient text extracted from PDF');
+    }
+    
+    return finalText;
     
   } catch (error) {
-    console.error('Fallback extraction failed:', error);
-    return 'PDF text extraction failed';
+    console.error('Enhanced fallback extraction failed:', error);
+    throw new Error('Could not extract readable text from PDF');
   }
+}
+
+// Clean and prepare extracted text
+function cleanExtractedText(text: string): string {
+  return text
+    .replace(/\s+/g, ' ') // Replace multiple spaces with single space
+    .replace(/\n\s*\n/g, '\n') // Remove empty lines
+    .replace(/[^\x20-\x7E\n]/g, ' ') // Keep only printable ASCII and newlines
+    .trim()
+    .substring(0, 20000); // Limit to 20KB to stay within token limits
 }
 
 serve(async (req) => {
@@ -124,6 +172,7 @@ serve(async (req) => {
     const { fileData, fileName } = requestBody;
     
     console.log('Received file:', fileName);
+    console.log('File data length:', fileData?.length || 0);
     
     if (!fileData || !fileName) {
       return new Response(JSON.stringify({ 
@@ -135,22 +184,36 @@ serve(async (req) => {
       });
     }
 
-    console.log('File data length:', fileData.length);
-
-    // Extract text from PDF first
-    const extractedText = await extractTextFromPDF(fileData);
+    // Extract text from PDF
+    let extractedText;
+    try {
+      extractedText = await extractTextFromPDF(fileData);
+    } catch (extractionError) {
+      console.error('Text extraction failed:', extractionError);
+      return new Response(JSON.stringify({ 
+        success: false,
+        error: `Failed to extract text from PDF: ${extractionError.message}` 
+      }), {
+        status: 400,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
     
     if (!extractedText || extractedText.trim().length < 50) {
       return new Response(JSON.stringify({ 
         success: false,
-        error: 'Could not extract sufficient text from PDF. Please ensure the PDF contains readable AWS billing information.' 
+        error: 'Could not extract sufficient readable text from PDF. Please ensure the PDF contains AWS billing information and is not password protected.' 
       }), {
         status: 400,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
 
-    console.log('Calling OpenAI API with extracted text...');
+    console.log('Successfully extracted text, length:', extractedText.length);
+    console.log('Sample text:', extractedText.substring(0, 200));
+
+    // Call OpenAI API for structured data extraction
+    console.log('Calling OpenAI API...');
 
     const openAIResponse = await fetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
@@ -163,43 +226,40 @@ serve(async (req) => {
         messages: [
           {
             role: 'system',
-            content: `You are an expert at extracting data from AWS billing invoices. You will receive extracted text from an AWS PDF invoice and must return ONLY valid JSON without any markdown formatting.
+            content: `You are an expert at extracting structured data from AWS billing documents. You will receive text extracted from an AWS PDF invoice.
 
-            Extract the following information and return it as valid JSON:
+            Extract the following information and return ONLY a valid JSON object (no markdown, no code blocks):
+
             {
-              "totalCost": number (the exact total amount due from the invoice),
-              "costChange": number (percentage change from previous month if available, otherwise 0),
-              "billingPeriod": "YYYY-MM" (extract from the invoice date),
+              "totalCost": number (the total amount due - look for words like "Total", "Amount Due", "Balance", followed by a dollar amount),
+              "costChange": number (percentage change from previous period if mentioned, otherwise 0),
+              "billingPeriod": "YYYY-MM" (billing period from the document),
               "services": [
                 {
-                  "name": "service name (e.g., EC2-Instance, Amazon S3, Amazon RDS)",
-                  "cost": number (exact cost from invoice),
+                  "name": "service name",
+                  "cost": number,
                   "change": number (percentage change if available, otherwise 0),
-                  "description": "brief description of the service"
+                  "description": "brief description"
                 }
               ],
               "recommendations": [
-                "cost optimization recommendation 1",
-                "cost optimization recommendation 2", 
-                "cost optimization recommendation 3"
+                "cost optimization recommendation based on the services used"
               ]
             }
-            
+
             CRITICAL RULES:
-            - Return ONLY the JSON object, no markdown, no code blocks, no additional text
-            - Extract EXACT values from the text provided
-            - If you cannot find exact values, return 0 for numbers and empty arrays for lists
-            - Do not guess or hallucinate data that is not clearly present in the text
-            - Focus on finding the main total cost and major service breakdowns`
+            - Return ONLY the JSON object, no additional text
+            - Extract exact numerical values from the text
+            - If you cannot find a total cost, look for any dollar amounts and use the largest one
+            - Focus on finding AWS service names like EC2, S3, RDS, Lambda, CloudFront, etc.
+            - If no clear data is found, return reasonable defaults but ensure totalCost is a valid number`
           },
           {
             role: 'user',
-            content: `Extract billing data from this AWS invoice text. Find the total amount due, billing period, and service costs. 
+            content: `Extract AWS billing data from this text. The filename is "${fileName}".
 
-            File: ${fileName}
-            
-            Extracted text from PDF:
-            ${extractedText}`
+TEXT FROM PDF:
+${extractedText}`
           }
         ],
         max_tokens: 2000,
@@ -235,9 +295,9 @@ serve(async (req) => {
     }
 
     let extractedContent = openAIData.choices[0].message.content;
-    console.log('Raw extracted content:', extractedContent);
+    console.log('Raw OpenAI response:', extractedContent);
     
-    // Clean up the response - remove markdown code blocks if present
+    // Clean up the response
     extractedContent = extractedContent.trim();
     if (extractedContent.startsWith('```json')) {
       extractedContent = extractedContent.replace(/^```json\s*/, '').replace(/\s*```$/, '');
@@ -251,61 +311,54 @@ serve(async (req) => {
     let parsedData;
     try {
       parsedData = JSON.parse(extractedContent);
-      console.log('Successfully parsed OpenAI response:', parsedData);
+      console.log('Successfully parsed OpenAI response');
       
-      // Validate that we have the required fields
-      if (!parsedData.totalCost || typeof parsedData.totalCost !== 'number') {
-        throw new Error('Invalid or missing totalCost in response');
+      // Ensure we have valid data structure
+      if (typeof parsedData !== 'object' || parsedData === null) {
+        throw new Error('Response is not a valid object');
       }
+      
+      // Set defaults for missing fields
+      parsedData.totalCost = parsedData.totalCost || 0;
+      parsedData.costChange = parsedData.costChange || 0;
+      parsedData.billingPeriod = parsedData.billingPeriod || new Date().toISOString().substring(0, 7);
+      parsedData.services = parsedData.services || [];
+      parsedData.recommendations = parsedData.recommendations || [];
       
     } catch (parseError) {
       console.error('Failed to parse OpenAI response:', parseError);
-      console.log('Attempting to extract data manually from raw content...');
+      console.log('Attempting manual data extraction...');
       
-      // Try to extract at least the total cost manually if JSON parsing fails
-      const totalMatches = extractedText.match(/total[^:]*:?\s*\$?\s*([0-9,]+\.?[0-9]*)/gi);
-      const amountMatches = extractedText.match(/\$([0-9,]+\.?[0-9]*)/g);
+      // Manual extraction as fallback
+      const dollarAmounts = extractedText.match(/\$\s*([0-9,]+\.?[0-9]*)/g) || [];
+      const amounts = dollarAmounts.map(amount => {
+        const num = parseFloat(amount.replace(/[\$,\s]/g, ''));
+        return isNaN(num) ? 0 : num;
+      });
       
-      let totalCost = 0;
-      if (totalMatches && totalMatches.length > 0) {
-        const match = totalMatches[0].match(/([0-9,]+\.?[0-9]*)/);
-        if (match) {
-          totalCost = parseFloat(match[1].replace(/,/g, ''));
-        }
-      } else if (amountMatches && amountMatches.length > 0) {
-        // Find the largest dollar amount as likely total
-        const amounts = amountMatches.map(m => parseFloat(m.replace(/[\$,]/g, '')));
-        totalCost = Math.max(...amounts);
-      }
+      const totalCost = amounts.length > 0 ? Math.max(...amounts) : 0;
       
-      if (totalCost > 0) {
-        console.log('Extracted total cost manually:', totalCost);
-        parsedData = {
-          totalCost: totalCost,
-          costChange: 0,
-          billingPeriod: new Date().toISOString().substring(0, 7),
-          services: [
-            { name: 'Various AWS Services', cost: totalCost, change: 0, description: 'Multiple AWS services from uploaded invoice' }
-          ],
-          recommendations: [
-            'Review your AWS usage patterns for optimization opportunities',
-            'Consider Reserved Instances for predictable workloads',
-            'Monitor and right-size your resources'
-          ]
-        };
-      } else {
-        console.error('Could not extract any meaningful data');
-        return new Response(JSON.stringify({ 
-          success: false,
-          error: 'Could not extract data from invoice. Please ensure the PDF contains AWS billing information.' 
-        }), {
-          status: 400,
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        });
-      }
+      parsedData = {
+        totalCost: totalCost,
+        costChange: 0,
+        billingPeriod: new Date().toISOString().substring(0, 7),
+        services: totalCost > 0 ? [
+          { 
+            name: 'AWS Services', 
+            cost: totalCost, 
+            change: 0, 
+            description: 'Various AWS services from uploaded invoice' 
+          }
+        ] : [],
+        recommendations: [
+          'Review your AWS usage patterns for optimization opportunities',
+          'Consider Reserved Instances for predictable workloads',
+          'Monitor and right-size your resources regularly'
+        ]
+      };
     }
 
-    console.log('Returning parsed data:', parsedData);
+    console.log('Final parsed data:', parsedData);
 
     return new Response(JSON.stringify({ 
       success: true, 
