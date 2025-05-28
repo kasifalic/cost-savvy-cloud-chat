@@ -1,5 +1,5 @@
 
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useRef } from 'react';
 import { Upload, FileText, CheckCircle, AlertCircle, Sparkles, BarChart3, MessageSquare } from 'lucide-react';
 import { Button } from '../components/ui/button';
 import { supabase } from '../integrations/supabase/client';
@@ -12,6 +12,7 @@ const UploadSection = ({ onDataExtracted }: UploadSectionProps) => {
   const [isDragging, setIsDragging] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
   const [uploadStatus, setUploadStatus] = useState<'idle' | 'success' | 'error'>('idle');
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handleDragOver = useCallback((e: React.DragEvent) => {
     e.preventDefault();
@@ -33,6 +34,10 @@ const UploadSection = ({ onDataExtracted }: UploadSectionProps) => {
   const handleFileInput = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(e.target.files || []);
     handleFiles(files);
+  };
+
+  const handleButtonClick = () => {
+    fileInputRef.current?.click();
   };
 
   const handleFiles = async (files: File[]) => {
@@ -78,9 +83,9 @@ const UploadSection = ({ onDataExtracted }: UploadSectionProps) => {
         return;
       }
 
-      // Simulate processing delay
+      // Simulate processing delay - in real implementation, this would be actual PDF parsing
       setTimeout(async () => {
-        // Update invoice with processed data
+        // Update invoice with processed data (currently mock data)
         const processedData = {
           totalCost: 2847.56,
           services: ['EC2', 'S3', 'RDS', 'Lambda'],
@@ -189,17 +194,18 @@ const UploadSection = ({ onDataExtracted }: UploadSectionProps) => {
               </div>
               <div>
                 <input
+                  ref={fileInputRef}
                   type="file"
                   accept=".pdf"
                   onChange={handleFileInput}
                   className="hidden"
-                  id="file-upload"
                 />
-                <label htmlFor="file-upload">
-                  <Button className="relative bg-gradient-to-r from-teal-500 to-orange-600 hover:from-teal-600 hover:to-orange-700 text-white px-8 py-4 text-lg font-medium cursor-pointer border-0 shadow-xl shadow-teal-500/25 hover:shadow-teal-500/40 transition-all duration-300">
-                    Choose File
-                  </Button>
-                </label>
+                <Button 
+                  onClick={handleButtonClick}
+                  className="relative bg-gradient-to-r from-teal-500 to-orange-600 hover:from-teal-600 hover:to-orange-700 text-white px-8 py-4 text-lg font-medium border-0 shadow-xl shadow-teal-500/25 hover:shadow-teal-500/40 transition-all duration-300"
+                >
+                  Choose File
+                </Button>
               </div>
             </div>
           )}
