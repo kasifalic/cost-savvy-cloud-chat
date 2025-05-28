@@ -1,9 +1,7 @@
-
 import React, { useState, useCallback, useRef } from 'react';
 import { Upload, FileText, CheckCircle, AlertCircle, Sparkles, BarChart3, MessageSquare } from 'lucide-react';
 import { Button } from '../components/ui/button';
 import { supabase } from '../integrations/supabase/client';
-import { useAuth } from './AuthWrapper';
 
 interface UploadSectionProps {
   onDataExtracted: (data: any) => void;
@@ -15,7 +13,6 @@ const UploadSection = ({ onDataExtracted }: UploadSectionProps) => {
   const [uploadStatus, setUploadStatus] = useState<'idle' | 'success' | 'error'>('idle');
   const [errorMessage, setErrorMessage] = useState('');
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const { user } = useAuth();
 
   const handleDragOver = useCallback((e: React.DragEvent) => {
     e.preventDefault();
@@ -51,55 +48,24 @@ const UploadSection = ({ onDataExtracted }: UploadSectionProps) => {
       return;
     }
 
-    if (!user) {
-      setUploadStatus('error');
-      setErrorMessage('Please log in to upload files');
-      return;
-    }
-
     setIsProcessing(true);
     setUploadStatus('idle');
     setErrorMessage('');
     
     try {
-      // Upload file to Supabase Storage
-      const fileName = `${user.id}/${Date.now()}-${pdfFile.name}`;
-      const { data: uploadData, error: uploadError } = await supabase.storage
-        .from('aws-invoices')
-        .upload(fileName, pdfFile);
+      // For testing without authentication, we'll skip the database storage
+      // and directly process the file with OpenAI
+      
+      // Convert PDF to base64 for processing
+      const fileBuffer = await pdfFile.arrayBuffer();
+      const base64 = btoa(String.fromCharCode(...new Uint8Array(fileBuffer)));
 
-      if (uploadError) {
-        throw new Error('Failed to upload file: ' + uploadError.message);
-      }
-
-      // Get the public URL for the uploaded file
-      const { data: { publicUrl } } = supabase.storage
-        .from('aws-invoices')
-        .getPublicUrl(fileName);
-
-      // Store invoice metadata in database
-      const { data: invoiceData, error: dbError } = await supabase
-        .from('aws_invoices')
-        .insert({
-          filename: pdfFile.name,
-          file_path: uploadData.path,
-          file_size: pdfFile.size,
-          processing_status: 'processing',
-          user_id: user.id
-        })
-        .select()
-        .single();
-
-      if (dbError) {
-        throw new Error('Failed to save invoice data: ' + dbError.message);
-      }
-
-      // Call the edge function to parse the PDF
+      // Call the parse function directly with the file data
       const { data: parseResult, error: parseError } = await supabase.functions
         .invoke('parse-aws-invoice', {
           body: {
-            invoiceId: invoiceData.id,
-            fileUrl: publicUrl
+            fileData: base64,
+            fileName: pdfFile.name
           }
         });
 

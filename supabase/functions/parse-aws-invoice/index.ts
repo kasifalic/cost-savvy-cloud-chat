@@ -1,7 +1,6 @@
 
 import "https://deno.land/x/xhr@0.1.0/mod.ts";
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.0.0';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -9,8 +8,6 @@ const corsHeaders = {
 };
 
 const openAIApiKey = Deno.env.get('OPENAI_API_KEY');
-const supabaseUrl = Deno.env.get('SUPABASE_URL');
-const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
 
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
@@ -18,20 +15,11 @@ serve(async (req) => {
   }
 
   try {
-    const { invoiceId, fileUrl } = await req.json();
+    const { fileData, fileName } = await req.json();
     
     if (!openAIApiKey) {
       throw new Error('OpenAI API key not configured');
     }
-
-    const supabase = createClient(supabaseUrl!, supabaseServiceKey!);
-
-    // Download the PDF file
-    const fileResponse = await fetch(fileUrl);
-    const fileBuffer = await fileResponse.arrayBuffer();
-    
-    // Convert to base64 for OpenAI
-    const base64 = btoa(String.fromCharCode(...new Uint8Array(fileBuffer)));
 
     // Use OpenAI to extract data from the PDF
     const openAIResponse = await fetch('https://api.openai.com/v1/chat/completions', {
@@ -69,7 +57,7 @@ serve(async (req) => {
           },
           {
             role: 'user',
-            content: `Please analyze this AWS invoice PDF and extract the billing data. Here's the PDF content (base64): ${base64.substring(0, 100000)}` // Limit size
+            content: `Please analyze this AWS invoice PDF and extract the billing data. Here's the PDF content (base64): ${fileData.substring(0, 100000)}` // Limit size
           }
         ],
         max_tokens: 2000,
@@ -108,26 +96,6 @@ serve(async (req) => {
           'Right-size RDS instances - Save $200/month'
         ]
       };
-    }
-
-    // Update the invoice record with extracted data
-    const { error: updateError } = await supabase
-      .from('aws_invoices')
-      .update({
-        total_cost: parsedData.totalCost,
-        billing_period: parsedData.billingPeriod,
-        services_data: {
-          services: parsedData.services,
-          costChange: parsedData.costChange,
-          recommendations: parsedData.recommendations
-        },
-        processing_status: 'completed',
-        processed_at: new Date().toISOString()
-      })
-      .eq('id', invoiceId);
-
-    if (updateError) {
-      throw updateError;
     }
 
     return new Response(JSON.stringify({ 
