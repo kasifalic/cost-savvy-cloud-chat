@@ -1,11 +1,11 @@
 
-export async function analyzeWithGPTVision(pdfDataUrl: string, openAIApiKey: string): Promise<any> {
+export async function analyzeWithGPTVision(imageDataUrl: string, openAIApiKey: string): Promise<any> {
   console.log('Analyzing with GPT-4 Vision...');
   
   try {
-    // Check if the data URL is a PDF (which Vision API can't handle)
-    if (pdfDataUrl.startsWith('data:application/pdf')) {
-      console.log('PDF detected - Vision API cannot process PDF files directly');
+    // Check if we have a valid image data URL
+    if (!imageDataUrl || imageDataUrl === '' || imageDataUrl.startsWith('data:application/pdf')) {
+      console.log('Invalid or PDF data detected - Vision API requires image files');
       
       // Return structured fallback response explaining the limitation
       const fallbackData = {
@@ -14,18 +14,24 @@ export async function analyzeWithGPTVision(pdfDataUrl: string, openAIApiKey: str
         billingPeriod: new Date().toISOString().substring(0, 7),
         services: [],
         recommendations: [
-          'GPT-4 Vision requires image files (PNG, JPG) - PDF format is not supported.',
-          'To use Vision analysis, please convert your AWS bill to PNG or JPG format first.',
+          'GPT-4 Vision requires image files (JPG, PNG) - PDF format is not supported.',
+          'To use Vision analysis, please convert your AWS bill to JPG or PNG format first.',
           'Alternatively, use the "Text Extraction" method which can process PDF files directly.',
-          'You can download your bill from AWS Console and convert it to an image format for Vision analysis.'
+          'You can download your bill from AWS Console and save it as an image for Vision analysis.'
         ]
       };
       
-      console.log('Returning fallback data due to PDF format limitation');
+      console.log('Returning fallback data due to format limitation');
       return fallbackData;
     }
 
-    // If we have an image data URL, proceed with Vision API
+    // Validate that it's actually an image data URL
+    if (!imageDataUrl.startsWith('data:image/')) {
+      console.log('Data URL is not an image format');
+      throw new Error('Invalid image format for Vision API');
+    }
+
+    // If we have a valid image data URL, proceed with Vision API
     console.log('Processing image with GPT-4 Vision API...');
     
     const response = await fetch('https://api.openai.com/v1/chat/completions', {
@@ -68,7 +74,8 @@ export async function analyzeWithGPTVision(pdfDataUrl: string, openAIApiKey: str
               {
                 type: 'image_url',
                 image_url: {
-                  url: pdfDataUrl
+                  url: imageDataUrl,
+                  detail: 'high'
                 }
               }
             ]
@@ -86,7 +93,7 @@ export async function analyzeWithGPTVision(pdfDataUrl: string, openAIApiKey: str
     }
 
     const result = await response.json();
-    console.log('OpenAI Vision API response:', result);
+    console.log('OpenAI Vision API response received');
 
     if (!result.choices || !result.choices[0] || !result.choices[0].message) {
       throw new Error('Invalid response format from OpenAI API');
@@ -99,6 +106,21 @@ export async function analyzeWithGPTVision(pdfDataUrl: string, openAIApiKey: str
     try {
       const analyzedData = JSON.parse(content);
       console.log('Successfully parsed Vision analysis:', analyzedData);
+      
+      // Validate the structure
+      if (typeof analyzedData.totalCost !== 'number') {
+        analyzedData.totalCost = 0;
+      }
+      if (typeof analyzedData.costChange !== 'number') {
+        analyzedData.costChange = 0;
+      }
+      if (!analyzedData.services || !Array.isArray(analyzedData.services)) {
+        analyzedData.services = [];
+      }
+      if (!analyzedData.recommendations || !Array.isArray(analyzedData.recommendations)) {
+        analyzedData.recommendations = ['Analysis completed successfully'];
+      }
+      
       return analyzedData;
     } catch (parseError) {
       console.error('Failed to parse Vision analysis as JSON:', parseError);
@@ -111,7 +133,7 @@ export async function analyzeWithGPTVision(pdfDataUrl: string, openAIApiKey: str
         services: [],
         recommendations: [
           'Vision analysis completed but data extraction needs refinement.',
-          'Raw analysis: ' + content.substring(0, 500) + '...'
+          'Raw analysis: ' + content.substring(0, 200) + '...'
         ]
       };
     }

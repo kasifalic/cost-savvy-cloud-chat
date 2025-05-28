@@ -13,27 +13,31 @@ export async function convertPDFToImages(base64Data: string): Promise<string[]> 
     const pdfDoc = await PDFDocument.load(pdfBytes);
     const pages = pdfDoc.getPages();
     
-    console.log(`PDF has ${pages.length} pages, converting to images...`);
+    console.log(`PDF has ${pages.length} pages, attempting conversion...`);
     
-    const imageDataUrls: string[] = [];
-    
-    // For now, we'll create a simple fallback since PDF to image conversion
-    // in Deno edge functions is complex. We'll simulate the conversion
-    // and return a data URL that indicates the PDF content
-    for (let i = 0; i < Math.min(pages.length, 3); i++) { // Limit to first 3 pages
-      // Create a placeholder image data URL that represents the PDF page
-      // In a real implementation, you'd use a library like pdf2pic or similar
-      const placeholderImageData = `data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==`;
-      imageDataUrls.push(placeholderImageData);
-    }
-    
-    console.log(`Created ${imageDataUrls.length} image representations`);
-    return imageDataUrls;
+    // Since true PDF to image conversion is complex in Deno,
+    // we'll return empty array to trigger the limitation message
+    console.log('PDF to image conversion not fully supported, returning empty array');
+    return [];
     
   } catch (error) {
-    console.error('PDF to image conversion failed:', error);
-    // Fallback: return empty array which will trigger the limitation message
+    console.error('PDF processing failed:', error);
     return [];
+  }
+}
+
+export async function processImageData(base64Data: string, mimeType: string): Promise<string> {
+  console.log('Processing image data for GPT-4 Vision...', mimeType);
+  
+  try {
+    // Create proper data URL for image
+    const dataUrl = `data:${mimeType};base64,${base64Data}`;
+    console.log('Image processed successfully for Vision API');
+    return dataUrl;
+    
+  } catch (error) {
+    console.error('Image processing failed:', error);
+    throw new Error(`Failed to process image: ${error.message}`);
   }
 }
 
@@ -49,10 +53,9 @@ export async function convertPDFToDataUrl(base64Data: string): Promise<string> {
       return images[0];
     }
     
-    // Fallback to original PDF data URL
-    const pdfDataUrl = `data:application/pdf;base64,${base64Data}`;
-    console.log('PDF converted to data URL successfully');
-    return pdfDataUrl;
+    // For PDFs, return empty string to trigger limitation message
+    console.log('PDF cannot be processed by Vision API directly');
+    return '';
     
   } catch (error) {
     console.error('PDF conversion failed:', error);

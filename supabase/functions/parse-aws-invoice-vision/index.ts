@@ -4,7 +4,7 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.49.8';
 
 import { corsHeaders, handleCorsRequest } from './cors.ts';
-import { convertPDFToImages } from './pdf-processor.ts';
+import { convertPDFToDataUrl, processImageData } from './pdf-processor.ts';
 import { uploadPDFToStorage } from './storage.ts';
 import { analyzeWithGPTVision } from './gpt-vision.ts';
 import { storeExtractionRecord, updateExtractionRecord } from './database.ts';
@@ -15,6 +15,30 @@ const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
 
 // Initialize Supabase client
 const supabase = createClient(supabaseUrl!, supabaseServiceKey!);
+
+// Helper function to detect file type from base64 data
+function detectFileType(base64Data: string): { type: string; mimeType: string } {
+  // Check the first few bytes of the base64 data
+  const header = base64Data.substring(0, 10);
+  
+  // PDF signature
+  if (header.startsWith('JVBERi')) {
+    return { type: 'pdf', mimeType: 'application/pdf' };
+  }
+  
+  // JPEG signature
+  if (header.startsWith('/9j/')) {
+    return { type: 'image', mimeType: 'image/jpeg' };
+  }
+  
+  // PNG signature
+  if (header.startsWith('iVBORw0K')) {
+    return { type: 'image', mimeType: 'image/png' };
+  }
+  
+  // Default to PDF if uncertain
+  return { type: 'pdf', mimeType: 'application/pdf' };
+}
 
 serve(async (req) => {
   // Handle CORS preflight requests
@@ -51,12 +75,23 @@ serve(async (req) => {
       });
     }
 
-    // Step 1: Upload PDF to Supabase Storage
+    // Detect the file type
+    const fileInfo = detectFileType(fileData);
+    console.log('Detected file type:', fileInfo);
+
+    // Step 1: Upload file to Supabase Storage
     const storagePath = await uploadPDFToStorage(supabase, fileData, fileName);
     
-    // Step 2: Convert PDF to images for Vision processing
-    console.log('Converting PDF to images for Vision analysis...');
-    const images = await convertPDFToImages(fileData);
+    // Step 2: Process the file based on its type
+    let processedDataUrl = '';
+    
+    if (fileInfo.type === 'image') {
+      console.log('Processing image file for Vision analysis...');
+      processedDataUrl = await processImageData(fileData, fileInfo.mimeType);
+    } else {
+      console.log('Processing PDF file - attempting conversion...');
+      processedDataUrl = await convertPDFToDataUrl(fileData);
+    }
     
     // Step 3: Store processing record in database
     const extractionRecord = await storeExtractionRecord(
@@ -66,27 +101,8 @@ serve(async (req) => {
     );
 
     // Step 4: Analyze with GPT-4 Vision
-    let analyzedData;
-    
-    if (images.length > 0) {
-      console.log(`Processing ${images.length} images with Vision API...`);
-      // Use the first image for analysis (you could combine multiple images if needed)
-      analyzedData = await analyzeWithGPTVision(images[0], openAIApiKey);
-    } else {
-      console.log('No images generated, providing PDF limitation response...');
-      analyzedData = {
-        totalCost: 0,
-        costChange: 0,
-        billingPeriod: new Date().toISOString().substring(0, 7),
-        services: [],
-        recommendations: [
-          'PDF to image conversion is not fully supported in this environment.',
-          'For best results with Vision API, please upload your AWS bill as a PNG or JPG image.',
-          'Alternatively, use the "Text Extraction" method which can process PDF files directly.',
-          'You can convert your PDF to an image using online tools or software before uploading.'
-        ]
-      };
-    }
+    console.log('Analyzing with GPT-4 Vision...');
+    const analyzedData = await analyzeWithGPTVision(processedDataUrl, openAIApiKey);
 
     // Step 5: Update the extraction record with processed data
     await updateExtractionRecord(supabase, extractionRecord.id, analyzedData);
@@ -100,7 +116,8 @@ serve(async (req) => {
       extractionId: extractionRecord.id,
       storagePath: storagePath,
       method: 'gpt4_vision',
-      imagesProcessed: images.length
+      fileType: fileInfo.type,
+      processed: processedDataUrl !== ''
     }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
