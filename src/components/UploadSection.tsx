@@ -2,6 +2,7 @@
 import React, { useState, useCallback } from 'react';
 import { Upload, FileText, CheckCircle, AlertCircle, Sparkles, BarChart3, MessageSquare } from 'lucide-react';
 import { Button } from '../components/ui/button';
+import { supabase } from '../integrations/supabase/client';
 
 interface UploadSectionProps {
   onDataExtracted: (data: any) => void;
@@ -44,16 +45,69 @@ const UploadSection = ({ onDataExtracted }: UploadSectionProps) => {
     setIsProcessing(true);
     setUploadStatus('idle');
     
-    // Simulate processing
-    setTimeout(() => {
+    try {
+      // Upload file to Supabase Storage
+      const fileName = `${Date.now()}-${pdfFile.name}`;
+      const { data: uploadData, error: uploadError } = await supabase.storage
+        .from('aws-invoices')
+        .upload(fileName, pdfFile);
+
+      if (uploadError) {
+        console.error('Upload error:', uploadError);
+        setUploadStatus('error');
+        setIsProcessing(false);
+        return;
+      }
+
+      // Store invoice metadata in database
+      const { data: invoiceData, error: dbError } = await supabase
+        .from('aws_invoices')
+        .insert({
+          filename: pdfFile.name,
+          file_path: uploadData.path,
+          file_size: pdfFile.size,
+          processing_status: 'processing'
+        })
+        .select()
+        .single();
+
+      if (dbError) {
+        console.error('Database error:', dbError);
+        setUploadStatus('error');
+        setIsProcessing(false);
+        return;
+      }
+
+      // Simulate processing delay
+      setTimeout(async () => {
+        // Update invoice with processed data
+        const processedData = {
+          totalCost: 2847.56,
+          services: ['EC2', 'S3', 'RDS', 'Lambda'],
+          period: 'March 2024'
+        };
+
+        await supabase
+          .from('aws_invoices')
+          .update({
+            total_cost: processedData.totalCost,
+            billing_period: processedData.period,
+            services_data: { services: processedData.services },
+            processing_status: 'completed',
+            processed_at: new Date().toISOString()
+          })
+          .eq('id', invoiceData.id);
+
+        setIsProcessing(false);
+        setUploadStatus('success');
+        onDataExtracted(processedData);
+      }, 3000);
+
+    } catch (error) {
+      console.error('Error handling file:', error);
       setIsProcessing(false);
-      setUploadStatus('success');
-      onDataExtracted({
-        totalCost: 2847.56,
-        services: ['EC2', 'S3', 'RDS', 'Lambda'],
-        period: 'March 2024'
-      });
-    }, 3000);
+      setUploadStatus('error');
+    }
   };
 
   return (
@@ -97,7 +151,7 @@ const UploadSection = ({ onDataExtracted }: UploadSectionProps) => {
               </div>
               <div>
                 <h3 className="text-xl font-semibold text-black mb-2">Processing Your Bill</h3>
-                <p className="text-black">AI is analyzing your AWS costs...</p>
+                <p className="text-black">AI is analyzing your AWS costs and storing in database...</p>
                 <div className="mt-4 w-64 h-2 bg-white/10 rounded-full mx-auto overflow-hidden">
                   <div className="h-full bg-gradient-to-r from-teal-500 to-orange-600 rounded-full animate-pulse"></div>
                 </div>
@@ -110,13 +164,13 @@ const UploadSection = ({ onDataExtracted }: UploadSectionProps) => {
                 <CheckCircle className="h-16 w-16 text-emerald-400 mx-auto relative" />
               </div>
               <h3 className="text-2xl font-semibold text-black">Upload Successful!</h3>
-              <p className="text-black">Your AWS bill has been analyzed. Check the dashboard for insights.</p>
+              <p className="text-black">Your AWS bill has been stored in the database and analyzed. Check the dashboard for insights.</p>
             </div>
           ) : uploadStatus === 'error' ? (
             <div className="space-y-4">
               <AlertCircle className="h-16 w-16 text-red-400 mx-auto" />
               <h3 className="text-2xl font-semibold text-black">Upload Failed</h3>
-              <p className="text-black">Please ensure you're uploading a valid PDF file.</p>
+              <p className="text-black">Please ensure you're uploading a valid PDF file and try again.</p>
             </div>
           ) : (
             <div className="space-y-6">
@@ -130,7 +184,7 @@ const UploadSection = ({ onDataExtracted }: UploadSectionProps) => {
                 <div className="space-y-2 text-sm text-black">
                   <p>• Supports PDF files only</p>
                   <p>• Maximum file size: 10MB</p>
-                  <p>• Your data is processed securely</p>
+                  <p>• Your data is securely stored in our database</p>
                 </div>
               </div>
               <div>
