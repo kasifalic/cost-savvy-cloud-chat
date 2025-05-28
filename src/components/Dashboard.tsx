@@ -77,7 +77,11 @@ const Dashboard = ({ billData }: DashboardProps) => {
   const services = data.services_data?.services || [];
   const recommendations = data.services_data?.recommendations || [];
 
-  const getServiceIcon = (serviceName: string) => {
+  const getServiceIcon = (serviceName: string | undefined | null) => {
+    if (!serviceName || typeof serviceName !== 'string') {
+      return Cloud;
+    }
+    
     switch (serviceName.toLowerCase()) {
       case 'ec2': return Server;
       case 's3': return Database;
@@ -197,9 +201,11 @@ const Dashboard = ({ billData }: DashboardProps) => {
           
           <div className="grid gap-4">
             {services.map((service: Service, index: number) => {
-              const Icon = getServiceIcon(service.name);
-              const serviceCost = service.cost || 0;
-              const serviceChange = service.change || 0;
+              const Icon = getServiceIcon(service?.name);
+              const serviceCost = service?.cost || 0;
+              const serviceChange = service?.change || 0;
+              const serviceName = service?.name || 'Unknown Service';
+              const serviceDescription = service?.description || `Amazon ${serviceName}`;
               
               return (
                 <div key={index} className="relative group">
@@ -211,8 +217,8 @@ const Dashboard = ({ billData }: DashboardProps) => {
                           <Icon className="h-6 w-6 text-teal-400" />
                         </div>
                         <div>
-                          <h3 className="text-lg font-semibold text-black">{service.name}</h3>
-                          <p className="text-black">{service.description || `Amazon ${service.name}`}</p>
+                          <h3 className="text-lg font-semibold text-black">{serviceName}</h3>
+                          <p className="text-black">{serviceDescription}</p>
                         </div>
                       </div>
                       
