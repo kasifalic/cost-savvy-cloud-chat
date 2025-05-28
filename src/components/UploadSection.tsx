@@ -1,6 +1,6 @@
 
 import React, { useState, useCallback } from 'react';
-import { Upload, FileText, CheckCircle, AlertCircle, Sparkles } from 'lucide-react';
+import { Upload, FileText, CheckCircle, AlertCircle, Sparkles, BarChart3, MessageSquare } from 'lucide-react';
 import { Button } from '../components/ui/button';
 
 interface UploadSectionProps {
