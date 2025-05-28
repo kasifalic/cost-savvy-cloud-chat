@@ -47,7 +47,7 @@ const Dashboard = ({ billData }: DashboardProps) => {
               </span>
             </div>
             <h3 className="text-3xl font-bold text-black mb-1">
-              ${data.totalCost.toLocaleString()}
+              ${(data.totalCost || 0).toLocaleString()}
             </h3>
             <p className="text-black text-sm">Total Monthly Cost</p>
           </div>
@@ -57,21 +57,21 @@ const Dashboard = ({ billData }: DashboardProps) => {
           <div className="absolute inset-0 bg-gradient-to-r from-teal-500/10 to-cyan-600/10 rounded-2xl blur-xl"></div>
           <div className="relative backdrop-blur-xl bg-white/5 border border-white/10 rounded-2xl p-6 hover:bg-white/10 transition-all duration-300">
             <div className="flex items-center justify-between mb-4">
-              {data.costChange < 0 ? (
+              {(data.costChange || 0) < 0 ? (
                 <TrendingDown className="h-8 w-8 text-emerald-400" />
               ) : (
                 <TrendingUp className="h-8 w-8 text-red-400" />
               )}
               <span className={`text-xs px-2 py-1 rounded-full ${
-                data.costChange < 0 
+                (data.costChange || 0) < 0 
                   ? 'bg-emerald-500/20 text-emerald-300' 
                   : 'bg-red-500/20 text-red-300'
               }`}>
-                {data.costChange > 0 ? '+' : ''}{data.costChange}%
+                {(data.costChange || 0) > 0 ? '+' : ''}{data.costChange || 0}%
               </span>
             </div>
             <h3 className="text-3xl font-bold text-black mb-1">
-              {data.costChange > 0 ? '+' : ''}${Math.abs(data.costChange * 23).toFixed(0)}
+              {(data.costChange || 0) > 0 ? '+' : ''}${Math.abs((data.costChange || 0) * 23).toFixed(0)}
             </h3>
             <p className="text-black text-sm">vs Last Month</p>
           </div>
@@ -87,7 +87,7 @@ const Dashboard = ({ billData }: DashboardProps) => {
               </span>
             </div>
             <h3 className="text-3xl font-bold text-black mb-1">
-              {data.services.length}
+              {(data.services || []).length}
             </h3>
             <p className="text-black text-sm">AWS Services</p>
           </div>
@@ -120,8 +120,11 @@ const Dashboard = ({ billData }: DashboardProps) => {
           </h2>
           
           <div className="grid gap-4">
-            {data.services.map((service: any, index: number) => {
-              const Icon = service.icon;
+            {(data.services || []).map((service: any, index: number) => {
+              const Icon = service.icon || Server;
+              const serviceCost = service.cost || 0;
+              const serviceChange = service.change || 0;
+              
               return (
                 <div key={index} className="relative group">
                   <div className="absolute inset-0 bg-gradient-to-r from-white/5 to-white/10 rounded-xl blur-sm group-hover:blur-md transition-all duration-300"></div>
@@ -132,25 +135,25 @@ const Dashboard = ({ billData }: DashboardProps) => {
                           <Icon className="h-6 w-6 text-teal-400" />
                         </div>
                         <div>
-                          <h3 className="text-lg font-semibold text-black">{service.name}</h3>
-                          <p className="text-black">Amazon {service.name}</p>
+                          <h3 className="text-lg font-semibold text-black">{service.name || 'Unknown Service'}</h3>
+                          <p className="text-black">Amazon {service.name || 'Service'}</p>
                         </div>
                       </div>
                       
                       <div className="text-right">
                         <div className="text-2xl font-bold text-black">
-                          ${service.cost.toLocaleString()}
+                          ${serviceCost.toLocaleString()}
                         </div>
                         <div className={`flex items-center gap-1 ${
-                          service.change > 0 ? 'text-red-400' : 'text-emerald-400'
+                          serviceChange > 0 ? 'text-red-400' : 'text-emerald-400'
                         }`}>
-                          {service.change > 0 ? (
+                          {serviceChange > 0 ? (
                             <TrendingUp className="h-4 w-4" />
                           ) : (
                             <TrendingDown className="h-4 w-4" />
                           )}
                           <span className="text-sm">
-                            {service.change > 0 ? '+' : ''}{service.change}%
+                            {serviceChange > 0 ? '+' : ''}{serviceChange}%
                           </span>
                         </div>
                       </div>
@@ -160,7 +163,7 @@ const Dashboard = ({ billData }: DashboardProps) => {
                     <div className="mt-4 h-2 bg-white/10 rounded-full overflow-hidden">
                       <div 
                         className="h-full bg-gradient-to-r from-teal-500 to-orange-600 rounded-full transition-all duration-1000"
-                        style={{ width: `${(service.cost / data.totalCost) * 100}%` }}
+                        style={{ width: `${data.totalCost ? (serviceCost / data.totalCost) * 100 : 0}%` }}
                       ></div>
                     </div>
                   </div>
@@ -181,7 +184,7 @@ const Dashboard = ({ billData }: DashboardProps) => {
           </h2>
           
           <div className="space-y-4">
-            {data.recommendations.map((rec: string, index: number) => (
+            {(data.recommendations || []).map((rec: string, index: number) => (
               <div key={index} className="relative group">
                 <div className="absolute inset-0 bg-gradient-to-r from-emerald-500/10 to-green-600/10 rounded-xl blur-sm"></div>
                 <div className="relative backdrop-blur-xl bg-white/5 border border-white/10 rounded-xl p-4 hover:bg-white/10 transition-all duration-300">
