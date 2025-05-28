@@ -15,11 +15,23 @@ serve(async (req) => {
   }
 
   try {
-    const { fileData, fileName } = await req.json();
+    console.log('Parse AWS invoice function called');
+    
+    const requestBody = await req.json();
+    const { fileData, fileName } = requestBody;
+    
+    console.log('Received file:', fileName);
     
     if (!openAIApiKey) {
+      console.error('OpenAI API key not configured');
       throw new Error('OpenAI API key not configured');
     }
+
+    if (!fileData || !fileName) {
+      throw new Error('Missing file data or filename');
+    }
+
+    console.log('Calling OpenAI API for invoice parsing...');
 
     // Use OpenAI to extract data from the PDF
     const openAIResponse = await fetch('https://api.openai.com/v1/chat/completions', {
@@ -29,7 +41,7 @@ serve(async (req) => {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        model: 'gpt-4o',
+        model: 'gpt-4o-mini',
         messages: [
           {
             role: 'system',
@@ -57,7 +69,7 @@ serve(async (req) => {
           },
           {
             role: 'user',
-            content: `Please analyze this AWS invoice PDF and extract the billing data. Here's the PDF content (base64): ${fileData.substring(0, 100000)}` // Limit size
+            content: `Please analyze this AWS invoice PDF and extract the billing data. The file name is: ${fileName}. Here's a portion of the PDF content (base64): ${fileData.substring(0, 50000)}` // Limit size to prevent token overflow
           }
         ],
         max_tokens: 2000,
@@ -65,21 +77,34 @@ serve(async (req) => {
       }),
     });
 
+    console.log('OpenAI response status:', openAIResponse.status);
+
+    if (!openAIResponse.ok) {
+      const errorText = await openAIResponse.text();
+      console.error('OpenAI API error:', errorText);
+      throw new Error(`OpenAI API error: ${openAIResponse.status} - ${errorText}`);
+    }
+
     const openAIData = await openAIResponse.json();
+    console.log('OpenAI response received');
     
     if (!openAIData.choices || !openAIData.choices[0]) {
-      throw new Error('Failed to get response from OpenAI');
+      throw new Error('Invalid response from OpenAI');
     }
 
     const extractedContent = openAIData.choices[0].message.content;
+    console.log('Extracted content:', extractedContent.substring(0, 200) + '...');
     
     // Parse the JSON response
     let parsedData;
     try {
       parsedData = JSON.parse(extractedContent);
-    } catch (error) {
+      console.log('Successfully parsed OpenAI response');
+    } catch (parseError) {
+      console.error('Failed to parse OpenAI response:', parseError);
+      console.log('Raw content:', extractedContent);
+      
       // Fallback to mock data if parsing fails
-      console.error('Failed to parse OpenAI response:', error);
       parsedData = {
         totalCost: 2847.56,
         costChange: -12.3,
@@ -98,6 +123,8 @@ serve(async (req) => {
       };
     }
 
+    console.log('Returning parsed data:', parsedData);
+
     return new Response(JSON.stringify({ 
       success: true, 
       data: parsedData 
@@ -108,7 +135,7 @@ serve(async (req) => {
   } catch (error) {
     console.error('Error in parse-aws-invoice function:', error);
     return new Response(JSON.stringify({ 
-      error: error.message 
+      error: error.message || 'Unknown error occurred'
     }), {
       status: 500,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },

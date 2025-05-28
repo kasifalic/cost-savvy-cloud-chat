@@ -1,3 +1,4 @@
+
 import React, { useState, useCallback, useRef } from 'react';
 import { Upload, FileText, CheckCircle, AlertCircle, Sparkles, BarChart3, MessageSquare } from 'lucide-react';
 import { Button } from '../components/ui/button';
@@ -28,19 +29,19 @@ const UploadSection = ({ onDataExtracted }: UploadSectionProps) => {
     e.preventDefault();
     setIsDragging(false);
     const files = Array.from(e.dataTransfer.files);
-    handleFiles(files);
+    processFiles(files);
   }, []);
 
   const handleFileInput = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(e.target.files || []);
-    handleFiles(files);
+    processFiles(files);
   };
 
   const handleButtonClick = () => {
     fileInputRef.current?.click();
   };
 
-  const handleFiles = async (files: File[]) => {
+  const processFiles = async (files: File[]) => {
     const pdfFile = files.find(file => file.type === 'application/pdf');
     if (!pdfFile) {
       setUploadStatus('error');
@@ -53,14 +54,15 @@ const UploadSection = ({ onDataExtracted }: UploadSectionProps) => {
     setErrorMessage('');
     
     try {
-      // For testing without authentication, we'll skip the database storage
-      // and directly process the file with OpenAI
+      console.log('Processing file:', pdfFile.name);
       
       // Convert PDF to base64 for processing
       const fileBuffer = await pdfFile.arrayBuffer();
       const base64 = btoa(String.fromCharCode(...new Uint8Array(fileBuffer)));
 
-      // Call the parse function directly with the file data
+      console.log('File converted to base64, calling parse function...');
+
+      // Call the parse function with the file data
       const { data: parseResult, error: parseError } = await supabase.functions
         .invoke('parse-aws-invoice', {
           body: {
@@ -69,20 +71,23 @@ const UploadSection = ({ onDataExtracted }: UploadSectionProps) => {
           }
         });
 
+      console.log('Parse function response:', parseResult, parseError);
+
       if (parseError) {
         throw new Error('Failed to process invoice: ' + parseError.message);
       }
 
-      if (parseResult.error) {
+      if (parseResult?.error) {
         throw new Error(parseResult.error);
       }
 
       setIsProcessing(false);
       setUploadStatus('success');
       onDataExtracted(parseResult.data);
+      console.log('File processed successfully');
 
     } catch (error: any) {
-      console.error('Error handling file:', error);
+      console.error('Error processing file:', error);
       setIsProcessing(false);
       setUploadStatus('error');
       setErrorMessage(error.message || 'An error occurred while processing the file');
