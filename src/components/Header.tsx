@@ -46,7 +46,7 @@ const Header = ({ activeTab, setActiveTab }: HeaderProps) => {
           
           {/* Desktop Navigation */}
           <nav className="hidden md:flex">
-            <div className="flex bg-white/5 backdrop-blur-xl rounded-2xl p-1 border border-white/10">
+            <div className="flex bg-white/20 backdrop-blur-xl rounded-2xl p-1 border border-white/30 shadow-lg">
               {navItems.map((item) => {
                 const Icon = item.icon;
                 return (
@@ -55,12 +55,12 @@ const Header = ({ activeTab, setActiveTab }: HeaderProps) => {
                     onClick={() => setActiveTab(item.id as any)}
                     className={`relative flex items-center space-x-2 px-6 py-3 rounded-xl text-sm font-medium transition-all duration-300 ${
                       activeTab === item.id
-                        ? 'text-white bg-gradient-to-r from-teal-500/20 to-orange-600/20 shadow-lg border border-white/20'
-                        : 'text-gray-300 hover:text-white hover:bg-white/5'
+                        ? 'text-white bg-gradient-to-r from-teal-500/40 to-orange-600/40 shadow-lg border border-white/40'
+                        : 'text-gray-100 hover:text-white hover:bg-white/20'
                     }`}
                   >
                     {activeTab === item.id && (
-                      <div className="absolute inset-0 bg-gradient-to-r from-teal-500/10 to-orange-600/10 rounded-xl blur-xl"></div>
+                      <div className="absolute inset-0 bg-gradient-to-r from-teal-500/20 to-orange-600/20 rounded-xl blur-xl"></div>
                     )}
                     <Icon className="h-4 w-4 relative z-10" />
                     <span className="relative z-10">{item.label}</span>
