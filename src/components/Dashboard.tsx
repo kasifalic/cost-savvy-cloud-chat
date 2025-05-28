@@ -4,12 +4,30 @@ import { DollarSign, TrendingUp, TrendingDown, Server, Database, Cloud, Zap } fr
 import { supabase } from '../integrations/supabase/client';
 import { useAuth } from './AuthWrapper';
 
+interface Service {
+  name: string;
+  cost: number;
+  change: number;
+  description: string;
+}
+
+interface InvoiceData {
+  id: string;
+  total_cost: number;
+  billing_period: string;
+  services_data: {
+    services: Service[];
+    costChange: number;
+    recommendations: string[];
+  };
+}
+
 interface DashboardProps {
   billData: any;
 }
 
 const Dashboard = ({ billData }: DashboardProps) => {
-  const [invoiceData, setInvoiceData] = useState<any>(null);
+  const [invoiceData, setInvoiceData] = useState<InvoiceData | null>(null);
   const [loading, setLoading] = useState(true);
   const { user } = useAuth();
 
@@ -32,7 +50,7 @@ const Dashboard = ({ billData }: DashboardProps) => {
         }
 
         if (data && data.length > 0) {
-          setInvoiceData(data[0]);
+          setInvoiceData(data[0] as InvoiceData);
         }
       } catch (error) {
         console.error('Error:', error);
@@ -44,8 +62,7 @@ const Dashboard = ({ billData }: DashboardProps) => {
     fetchLatestInvoice();
   }, [user, billData]);
 
-  // Use real data if available, otherwise fall back to mock data
-  const data = invoiceData || {
+  const mockData = {
     total_cost: 2847.56,
     services_data: {
       costChange: -12.3,
@@ -63,6 +80,7 @@ const Dashboard = ({ billData }: DashboardProps) => {
     }
   };
 
+  const data = invoiceData || mockData;
   const totalCost = data.total_cost || 0;
   const costChange = data.services_data?.costChange || 0;
   const services = data.services_data?.services || [];
@@ -187,7 +205,7 @@ const Dashboard = ({ billData }: DashboardProps) => {
           </h2>
           
           <div className="grid gap-4">
-            {services.map((service: any, index: number) => {
+            {services.map((service: Service, index: number) => {
               const Icon = getServiceIcon(service.name);
               const serviceCost = service.cost || 0;
               const serviceChange = service.change || 0;
