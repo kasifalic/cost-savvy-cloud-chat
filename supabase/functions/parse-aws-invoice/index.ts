@@ -21,6 +21,7 @@ serve(async (req) => {
     if (!openAIApiKey) {
       console.error('OpenAI API key not configured');
       return new Response(JSON.stringify({ 
+        success: false,
         error: 'OpenAI API key not configured' 
       }), {
         status: 500,
@@ -34,6 +35,7 @@ serve(async (req) => {
     } catch (parseError) {
       console.error('Failed to parse request body:', parseError);
       return new Response(JSON.stringify({ 
+        success: false,
         error: 'Invalid request body' 
       }), {
         status: 400,
@@ -47,6 +49,7 @@ serve(async (req) => {
     
     if (!fileData || !fileName) {
       return new Response(JSON.stringify({ 
+        success: false,
         error: 'Missing file data or filename' 
       }), {
         status: 400,
@@ -54,10 +57,14 @@ serve(async (req) => {
       });
     }
 
-    console.log('Calling OpenAI API for invoice parsing...');
+    console.log('File data length:', fileData.length);
 
-    // Limit the data size to prevent token overflow
-    const truncatedData = fileData.substring(0, 40000);
+    // Limit the data size to prevent token overflow (first 50KB of base64 data)
+    const maxDataLength = 50000;
+    const truncatedData = fileData.substring(0, maxDataLength);
+    
+    console.log('Truncated data length:', truncatedData.length);
+    console.log('Calling OpenAI API for invoice parsing...');
 
     const openAIResponse = await fetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
@@ -108,6 +115,7 @@ serve(async (req) => {
       const errorText = await openAIResponse.text();
       console.error('OpenAI API error:', errorText);
       return new Response(JSON.stringify({ 
+        success: false,
         error: `OpenAI API error: ${openAIResponse.status}` 
       }), {
         status: 500,
@@ -120,6 +128,7 @@ serve(async (req) => {
     
     if (!openAIData.choices || !openAIData.choices[0]) {
       return new Response(JSON.stringify({ 
+        success: false,
         error: 'Invalid response from OpenAI' 
       }), {
         status: 500,
@@ -170,6 +179,7 @@ serve(async (req) => {
   } catch (error) {
     console.error('Error in parse-aws-invoice function:', error);
     return new Response(JSON.stringify({ 
+      success: false,
       error: error.message || 'Unknown error occurred'
     }), {
       status: 500,

@@ -15,6 +15,21 @@ const UploadSection = ({ onDataExtracted }: UploadSectionProps) => {
   const [errorMessage, setErrorMessage] = useState('');
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  // Helper function to convert file to base64 safely
+  const fileToBase64 = (file: File): Promise<string> => {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => {
+        const result = reader.result as string;
+        // Remove the data URL prefix (e.g., "data:application/pdf;base64,")
+        const base64 = result.split(',')[1];
+        resolve(base64);
+      };
+      reader.onerror = reject;
+      reader.readAsDataURL(file);
+    });
+  };
+
   const handleDragOver = useCallback((e: React.DragEvent) => {
     e.preventDefault();
     setIsDragging(true);
@@ -29,31 +44,41 @@ const UploadSection = ({ onDataExtracted }: UploadSectionProps) => {
     e.preventDefault();
     setIsDragging(false);
     const files = Array.from(e.dataTransfer.files);
-    handleFileProcessing(files);
+    if (files.length > 0) {
+      processFile(files[0]);
+    }
   }, []);
 
   const handleFileInput = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = Array.from(e.target.files || []);
-    handleFileProcessing(files);
+    const files = e.target.files;
+    if (files && files.length > 0) {
+      processFile(files[0]);
+    }
   };
 
   const handleButtonClick = () => {
     fileInputRef.current?.click();
   };
 
-  const handleFileProcessing = async (files: File[]) => {
-    console.log('Starting file processing with files:', files.map(f => f.name));
+  const processFile = async (file: File) => {
+    console.log('Processing file:', file.name, 'Size:', file.size, 'Type:', file.type);
     
-    // Find PDF file
-    const pdfFile = files.find(file => file.type === 'application/pdf');
-    if (!pdfFile) {
-      console.log('No PDF file found');
+    // Validate file type
+    if (file.type !== 'application/pdf') {
+      console.log('Invalid file type:', file.type);
       setUploadStatus('error');
       setErrorMessage('Please upload a PDF file');
       return;
     }
 
-    console.log('Found PDF file:', pdfFile.name, 'Size:', pdfFile.size);
+    // Validate file size (10MB limit)
+    const maxSize = 10 * 1024 * 1024; // 10MB
+    if (file.size > maxSize) {
+      console.log('File too large:', file.size);
+      setUploadStatus('error');
+      setErrorMessage('File size must be less than 10MB');
+      return;
+    }
 
     // Set processing state
     setIsProcessing(true);
@@ -61,13 +86,11 @@ const UploadSection = ({ onDataExtracted }: UploadSectionProps) => {
     setErrorMessage('');
     
     try {
-      console.log('Converting file to base64...');
+      console.log('Converting file to base64 using FileReader...');
       
-      // Convert file to base64
-      const arrayBuffer = await pdfFile.arrayBuffer();
-      const uint8Array = new Uint8Array(arrayBuffer);
-      const base64String = btoa(String.fromCharCode.apply(null, Array.from(uint8Array)));
-
+      // Convert file to base64 using FileReader (safe for large files)
+      const base64String = await fileToBase64(file);
+      
       console.log('File converted to base64, length:', base64String.length);
       console.log('Calling Supabase function...');
 
@@ -75,7 +98,7 @@ const UploadSection = ({ onDataExtracted }: UploadSectionProps) => {
       const { data: result, error } = await supabase.functions.invoke('parse-aws-invoice', {
         body: {
           fileData: base64String,
-          fileName: pdfFile.name
+          fileName: file.name
         }
       });
 
@@ -89,6 +112,11 @@ const UploadSection = ({ onDataExtracted }: UploadSectionProps) => {
       if (result?.error) {
         console.error('Function returned error:', result.error);
         throw new Error(result.error);
+      }
+
+      if (!result?.success || !result?.data) {
+        console.error('Invalid response format:', result);
+        throw new Error('Invalid response from processing function');
       }
 
       console.log('Processing successful, extracted data:', result.data);
@@ -167,6 +195,12 @@ const UploadSection = ({ onDataExtracted }: UploadSectionProps) => {
               <AlertCircle className="h-16 w-16 text-red-400 mx-auto" />
               <h3 className="text-2xl font-semibold text-black">Upload Failed</h3>
               <p className="text-black">{errorMessage}</p>
+              <Button 
+                onClick={() => setUploadStatus('idle')}
+                className="relative bg-gradient-to-r from-teal-500 to-orange-600 hover:from-teal-600 hover:to-orange-700 text-white px-6 py-2 text-sm font-medium border-0"
+              >
+                Try Again
+              </Button>
             </div>
           ) : (
             <div className="space-y-6">
