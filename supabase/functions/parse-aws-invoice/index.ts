@@ -59,8 +59,8 @@ serve(async (req) => {
 
     console.log('File data length:', fileData.length);
 
-    // Limit the data size to prevent token overflow (first 50KB of base64 data)
-    const maxDataLength = 50000;
+    // Use more data for better extraction (100KB instead of 50KB)
+    const maxDataLength = 100000;
     const truncatedData = fileData.substring(0, maxDataLength);
     
     console.log('Truncated data length:', truncatedData.length);
@@ -77,31 +77,33 @@ serve(async (req) => {
         messages: [
           {
             role: 'system',
-            content: `You are an expert at extracting data from AWS billing invoices. Extract the following information from the PDF and return it as valid JSON:
+            content: `You are an expert at extracting data from AWS billing invoices. You must extract the EXACT values from the PDF and return ONLY valid JSON without any markdown formatting or code blocks.
+
+            Extract the following information and return it as valid JSON:
             {
-              "totalCost": number,
-              "costChange": number (percentage change from previous month, estimate if not available),
-              "billingPeriod": "YYYY-MM",
+              "totalCost": number (the exact total amount due from the invoice),
+              "costChange": number (percentage change from previous month if available, otherwise estimate),
+              "billingPeriod": "YYYY-MM" (extract from the invoice date),
               "services": [
                 {
-                  "name": "service name (e.g., EC2, S3, RDS)",
-                  "cost": number,
-                  "change": number (percentage change, estimate if not available),
-                  "description": "brief description"
+                  "name": "service name (e.g., EC2-Instance, Amazon S3, Amazon RDS)",
+                  "cost": number (exact cost from invoice),
+                  "change": number (percentage change if available, otherwise estimate),
+                  "description": "brief description of the service"
                 }
               ],
               "recommendations": [
                 "cost optimization recommendation 1",
-                "cost optimization recommendation 2",
+                "cost optimization recommendation 2", 
                 "cost optimization recommendation 3"
               ]
             }
             
-            Important: Return ONLY valid JSON, no additional text or explanations.`
+            CRITICAL: Return ONLY the JSON object, no markdown, no code blocks, no additional text. The response must be valid JSON that can be parsed directly.`
           },
           {
             role: 'user',
-            content: `Please analyze this AWS invoice PDF and extract the billing data. The file name is: ${fileName}. Here's a portion of the PDF content (base64): ${truncatedData}`
+            content: `Extract the billing data from this AWS invoice PDF. Look for the total amount due, billing period, and service costs. File: ${fileName}. PDF content (base64): ${truncatedData}`
           }
         ],
         max_tokens: 2000,
@@ -136,38 +138,67 @@ serve(async (req) => {
       });
     }
 
-    const extractedContent = openAIData.choices[0].message.content;
-    console.log('Extracted content preview:', extractedContent.substring(0, 200));
+    let extractedContent = openAIData.choices[0].message.content;
+    console.log('Raw extracted content:', extractedContent);
+    
+    // Clean up the response - remove markdown code blocks if present
+    extractedContent = extractedContent.trim();
+    if (extractedContent.startsWith('```json')) {
+      extractedContent = extractedContent.replace(/^```json\s*/, '').replace(/\s*```$/, '');
+    } else if (extractedContent.startsWith('```')) {
+      extractedContent = extractedContent.replace(/^```\s*/, '').replace(/\s*```$/, '');
+    }
+    
+    console.log('Cleaned content:', extractedContent);
     
     // Parse the JSON response
     let parsedData;
     try {
       parsedData = JSON.parse(extractedContent);
-      console.log('Successfully parsed OpenAI response');
+      console.log('Successfully parsed OpenAI response:', parsedData);
+      
+      // Validate that we have the required fields
+      if (!parsedData.totalCost || typeof parsedData.totalCost !== 'number') {
+        throw new Error('Invalid or missing totalCost in response');
+      }
+      
     } catch (parseError) {
       console.error('Failed to parse OpenAI response:', parseError);
-      console.log('Raw content:', extractedContent);
+      console.log('Attempting to extract data manually from raw content...');
       
-      // Fallback to mock data if parsing fails
-      parsedData = {
-        totalCost: 2847.56,
-        costChange: -12.3,
-        billingPeriod: new Date().toISOString().substring(0, 7),
-        services: [
-          { name: 'EC2', cost: 1240.50, change: -5.2, description: 'Elastic Compute Cloud instances' },
-          { name: 'S3', cost: 487.30, change: 8.1, description: 'Simple Storage Service' },
-          { name: 'RDS', cost: 765.20, change: -2.1, description: 'Relational Database Service' },
-          { name: 'Lambda', cost: 354.56, change: 15.3, description: 'Serverless compute functions' }
-        ],
-        recommendations: [
-          'Consider Reserved Instances for EC2 - Save up to 30%',
-          'Optimize S3 storage classes - Potential $120/month savings',
-          'Right-size RDS instances - Save $200/month'
-        ]
-      };
+      // Try to extract at least the total cost manually if JSON parsing fails
+      const totalMatch = extractedContent.match(/total[^:]*:\s*(\d+[\d,\.]*)/i);
+      const totalCost = totalMatch ? parseFloat(totalMatch[1].replace(/,/g, '')) : null;
+      
+      if (totalCost) {
+        console.log('Extracted total cost manually:', totalCost);
+        parsedData = {
+          totalCost: totalCost,
+          costChange: 0,
+          billingPeriod: new Date().toISOString().substring(0, 7),
+          services: [
+            { name: 'Various AWS Services', cost: totalCost, change: 0, description: 'Multiple AWS services from uploaded invoice' }
+          ],
+          recommendations: [
+            'Review your AWS usage patterns for optimization opportunities',
+            'Consider Reserved Instances for predictable workloads',
+            'Monitor and right-size your resources'
+          ]
+        };
+      } else {
+        // Last resort fallback
+        console.error('Could not extract any meaningful data, using fallback');
+        return new Response(JSON.stringify({ 
+          success: false,
+          error: 'Could not extract data from invoice. Please ensure the PDF contains AWS billing information.' 
+        }), {
+          status: 400,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
     }
 
-    console.log('Returning parsed data');
+    console.log('Returning parsed data:', parsedData);
 
     return new Response(JSON.stringify({ 
       success: true, 
