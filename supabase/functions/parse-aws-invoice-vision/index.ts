@@ -3,9 +3,6 @@ import "https://deno.land/x/xhr@0.1.0/mod.ts";
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.49.8';
 
-// Import pdfjs-dist for PDF to image conversion
-import * as pdfjsLib from 'https://esm.sh/pdfjs-dist@4.0.379/build/pdf.min.mjs';
-
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
@@ -18,78 +15,27 @@ const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
 // Initialize Supabase client
 const supabase = createClient(supabaseUrl!, supabaseServiceKey!);
 
-// Convert PDF pages to images using PDF.js
+// Convert PDF to images using a different approach
 async function convertPDFToImages(base64Data: string): Promise<string[]> {
-  console.log('Converting PDF to images...');
+  console.log('Converting PDF to images using alternative method...');
   
   try {
-    // Convert base64 to Uint8Array
-    const binaryString = atob(base64Data);
-    const bytes = new Uint8Array(binaryString.length);
-    for (let i = 0; i < binaryString.length; i++) {
-      bytes[i] = binaryString.charCodeAt(i);
-    }
-
-    // Load the PDF document
-    const loadingTask = pdfjsLib.getDocument({
-      data: bytes,
-      useSystemFonts: true,
-      disableFontFace: false,
-    });
+    // For now, we'll use a simpler approach that works in Deno
+    // Convert the PDF to a single image representation for GPT-4 Vision
     
-    const pdf = await loadingTask.promise;
-    console.log(`PDF loaded successfully. Pages: ${pdf.numPages}`);
+    // Since PDF.js has issues in Deno, let's create a fallback approach
+    // We'll send the PDF data directly to OpenAI and let it handle the conversion
+    console.log('Using fallback method: sending PDF data directly to GPT-4 Vision');
     
-    const images: string[] = [];
+    // Create a data URL for the PDF
+    const pdfDataUrl = `data:application/pdf;base64,${base64Data}`;
     
-    // Convert first 5 pages to images (limit for cost control)
-    const maxPages = Math.min(pdf.numPages, 5);
-    
-    for (let pageNum = 1; pageNum <= maxPages; pageNum++) {
-      console.log(`Converting page ${pageNum} to image...`);
-      
-      const page = await pdf.getPage(pageNum);
-      
-      // Set scale for good quality but reasonable size
-      const scale = 2.0;
-      const viewport = page.getViewport({ scale });
-      
-      // Create canvas
-      const canvas = new OffscreenCanvas(viewport.width, viewport.height);
-      const context = canvas.getContext('2d');
-      
-      if (!context) {
-        throw new Error('Could not get canvas context');
-      }
-      
-      // Render page to canvas
-      const renderContext = {
-        canvasContext: context,
-        viewport: viewport,
-      };
-      
-      await page.render(renderContext).promise;
-      
-      // Convert canvas to blob then to base64
-      const blob = await canvas.convertToBlob({ type: 'image/png' });
-      const arrayBuffer = await blob.arrayBuffer();
-      const base64Image = btoa(String.fromCharCode(...new Uint8Array(arrayBuffer)));
-      
-      images.push(`data:image/png;base64,${base64Image}`);
-      
-      // Clean up page resources
-      page.cleanup();
-    }
-    
-    // Clean up PDF resources
-    pdf.cleanup();
-    
-    console.log(`Successfully converted ${images.length} pages to images`);
-    return images;
+    // Return as single "image" (actually PDF data URL)
+    return [pdfDataUrl];
     
   } catch (error) {
-    console.error('PDF to image conversion failed:', error);
-    throw new Error(`Failed to convert PDF to images: ${error.message}`);
+    console.error('PDF conversion failed:', error);
+    throw new Error(`Failed to process PDF: ${error.message}`);
   }
 }
 
@@ -129,9 +75,9 @@ async function uploadPDFToStorage(base64Data: string, fileName: string): Promise
   }
 }
 
-// Analyze images with GPT-4 Vision
-async function analyzeWithGPTVision(images: string[]): Promise<any> {
-  console.log(`Analyzing ${images.length} images with GPT-4 Vision...`);
+// Analyze PDF with GPT-4 Vision
+async function analyzeWithGPTVision(pdfDataUrl: string): Promise<any> {
+  console.log('Analyzing PDF with GPT-4 Vision...');
   
   try {
     const messages = [
@@ -165,15 +111,15 @@ RETURN ONLY THE JSON OBJECT, NO MARKDOWN OR ADDITIONAL TEXT.`
         content: [
           {
             type: 'text',
-            text: 'Please analyze these AWS billing document pages and extract the structured data:'
+            text: 'Please analyze this AWS billing document and extract the structured data. This is a PDF document containing billing information.'
           },
-          ...images.map(image => ({
+          {
             type: 'image_url',
             image_url: {
-              url: image,
+              url: pdfDataUrl,
               detail: 'high'
             }
-          }))
+          }
         ]
       }
     ];
@@ -193,10 +139,18 @@ RETURN ONLY THE JSON OBJECT, NO MARKDOWN OR ADDITIONAL TEXT.`
     });
 
     if (!response.ok) {
-      throw new Error(`OpenAI API error: ${response.status}`);
+      const errorText = await response.text();
+      console.error('OpenAI API error response:', errorText);
+      throw new Error(`OpenAI API error: ${response.status} - ${errorText}`);
     }
 
     const data = await response.json();
+    
+    if (!data.choices || !data.choices[0] || !data.choices[0].message) {
+      console.error('Invalid OpenAI response structure:', data);
+      throw new Error('Invalid response from OpenAI API');
+    }
+    
     let extractedContent = data.choices[0].message.content.trim();
     
     // Clean up response
@@ -286,8 +240,8 @@ serve(async (req) => {
     // Step 1: Upload PDF to Supabase Storage
     const storagePath = await uploadPDFToStorage(fileData, fileName);
     
-    // Step 2: Convert PDF to images
-    const images = await convertPDFToImages(fileData);
+    // Step 2: Convert PDF for GPT-4 Vision (using fallback method)
+    const pdfDataUrls = await convertPDFToImages(fileData);
     
     // Step 3: Store processing record in database
     console.log('Storing processing record in Supabase...');
@@ -295,7 +249,7 @@ serve(async (req) => {
       .from('pdf_extractions')
       .insert({
         filename: fileName,
-        raw_text: `GPT-4 Vision processing of ${images.length} pages`,
+        raw_text: `GPT-4 Vision processing of PDF document`,
         file_size: Math.round(fileData.length * 0.75),
         extraction_method: 'gpt4_vision',
         processing_status: 'processing'
@@ -317,7 +271,7 @@ serve(async (req) => {
     console.log('Processing record stored with ID:', extractionRecord.id);
 
     // Step 4: Analyze with GPT-4 Vision
-    const analyzedData = await analyzeWithGPTVision(images);
+    const analyzedData = await analyzeWithGPTVision(pdfDataUrls[0]);
 
     // Step 5: Update the extraction record with processed data
     const { error: updateError } = await supabase
