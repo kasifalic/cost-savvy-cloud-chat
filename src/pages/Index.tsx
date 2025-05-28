@@ -12,25 +12,42 @@ const Index = () => {
   const [apiKey, setApiKey] = useState('');
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-green-50">
+    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-purple-900/20 to-slate-900 relative overflow-hidden">
+      {/* Animated background elements */}
+      <div className="absolute inset-0 overflow-hidden pointer-events-none">
+        <div className="absolute -top-40 -right-40 w-80 h-80 bg-purple-500/10 rounded-full blur-3xl animate-pulse"></div>
+        <div className="absolute -bottom-40 -left-40 w-80 h-80 bg-blue-500/10 rounded-full blur-3xl animate-pulse delay-1000"></div>
+        <div className="absolute top-1/2 left-1/2 w-96 h-96 bg-emerald-500/5 rounded-full blur-3xl animate-pulse delay-500"></div>
+      </div>
+      
       <Header activeTab={activeTab} setActiveTab={setActiveTab} />
       
-      <main className="container mx-auto px-4 py-8">
-        {activeTab === 'upload' && (
-          <UploadSection onDataExtracted={setBillData} />
-        )}
-        
-        {activeTab === 'dashboard' && (
-          <Dashboard billData={billData} />
-        )}
-        
-        {activeTab === 'chat' && (
-          <ChatInterface billData={billData} apiKey={apiKey} />
-        )}
-        
-        {activeTab === 'settings' && (
-          <SettingsPanel apiKey={apiKey} setApiKey={setApiKey} />
-        )}
+      <main className="container mx-auto px-4 py-8 relative z-10">
+        <div className="transition-all duration-500 ease-out">
+          {activeTab === 'upload' && (
+            <div className="animate-fade-in">
+              <UploadSection onDataExtracted={setBillData} />
+            </div>
+          )}
+          
+          {activeTab === 'dashboard' && (
+            <div className="animate-fade-in">
+              <Dashboard billData={billData} />
+            </div>
+          )}
+          
+          {activeTab === 'chat' && (
+            <div className="animate-fade-in">
+              <ChatInterface billData={billData} apiKey={apiKey} />
+            </div>
+          )}
+          
+          {activeTab === 'settings' && (
+            <div className="animate-fade-in">
+              <SettingsPanel apiKey={apiKey} setApiKey={setApiKey} />
+            </div>
+          )}
+        </div>
       </main>
     </div>
   );

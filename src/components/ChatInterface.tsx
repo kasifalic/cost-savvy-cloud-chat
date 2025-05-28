@@ -1,6 +1,7 @@
 
 import React, { useState, useRef, useEffect } from 'react';
-import { Send, MessageSquare, User, Bot } from 'lucide-react';
+import { Send, Bot, User, Sparkles, MessageSquare } from 'lucide-react';
+import { Button } from '../components/ui/button';
 
 interface ChatInterfaceProps {
   billData: any;
@@ -9,13 +10,20 @@ interface ChatInterfaceProps {
 
 interface Message {
   id: string;
-  text: string;
-  isBot: boolean;
+  type: 'user' | 'bot';
+  content: string;
   timestamp: Date;
 }
 
 const ChatInterface = ({ billData, apiKey }: ChatInterfaceProps) => {
-  const [messages, setMessages] = useState<Message[]>([]);
+  const [messages, setMessages] = useState<Message[]>([
+    {
+      id: '1',
+      type: 'bot',
+      content: "Hi! I'm your AWS cost optimization assistant. I've analyzed your bill and I'm ready to help you understand your costs and find savings opportunities. What would you like to know?",
+      timestamp: new Date()
+    }
+  ]);
   const [inputValue, setInputValue] = useState('');
   const [isTyping, setIsTyping] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -28,25 +36,13 @@ const ChatInterface = ({ billData, apiKey }: ChatInterfaceProps) => {
     scrollToBottom();
   }, [messages]);
 
-  useEffect(() => {
-    if (billData && messages.length === 0) {
-      const welcomeMessage: Message = {
-        id: '1',
-        text: `Hi! I've analyzed your AWS bill for ${billData.billingPeriod}. Your total cost was $${billData.totalCost}. I can help you understand your costs, identify optimization opportunities, and answer any questions about your bill. What would you like to know?`,
-        isBot: true,
-        timestamp: new Date()
-      };
-      setMessages([welcomeMessage]);
-    }
-  }, [billData]);
-
   const handleSendMessage = async () => {
     if (!inputValue.trim()) return;
 
     const userMessage: Message = {
       id: Date.now().toString(),
-      text: inputValue,
-      isBot: false,
+      type: 'user',
+      content: inputValue,
       timestamp: new Date()
     };
 
@@ -56,153 +52,148 @@ const ChatInterface = ({ billData, apiKey }: ChatInterfaceProps) => {
 
     // Simulate AI response
     setTimeout(() => {
-      const responses = [
-        "Based on your bill analysis, I can see that EC2 instances are your largest cost at $456.32 (36.6% of total). Consider right-sizing your instances to save 25-30%.",
-        "Your S3 costs are $234.21 this month. You could save money by moving infrequently accessed data to S3 IA or Glacier storage classes.",
-        "I notice you're spending $187.45 on RDS. Reserved instances could save you up to 40% for predictable workloads.",
-        "Looking at your monthly trend, costs increased 8.2% from last month. The main drivers are increased EC2 usage and new RDS instances.",
-        "I found several optimization opportunities: unused EBS volumes ($23), idle load balancers ($22), and over-provisioned instances ($137 potential savings)."
-      ];
-
-      const randomResponse = responses[Math.floor(Math.random() * responses.length)];
-      
-      const botMessage: Message = {
+      const botResponse: Message = {
         id: (Date.now() + 1).toString(),
-        text: randomResponse,
-        isBot: true,
+        type: 'bot',
+        content: generateMockResponse(inputValue),
         timestamp: new Date()
       };
-
-      setMessages(prev => [...prev, botMessage]);
+      setMessages(prev => [...prev, botResponse]);
       setIsTyping(false);
-    }, 1500);
+    }, 2000);
   };
 
-  const handleKeyPress = (e: React.KeyboardEvent) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault();
-      handleSendMessage();
-    }
+  const generateMockResponse = (query: string) => {
+    const responses = [
+      "Based on your AWS bill analysis, your highest cost service is EC2 at $1,240.50. I recommend considering Reserved Instances which could save you up to 30% on compute costs.",
+      "Your S3 costs have increased by 8.1% this month. Consider implementing lifecycle policies to automatically transition older objects to cheaper storage classes like IA or Glacier.",
+      "I notice you're spending $765.20 on RDS. You could potentially save $200/month by right-sizing your database instances based on actual utilization patterns.",
+      "Your Lambda usage shows great cost efficiency! The 15.3% increase is likely due to increased business value. Consider using Provisioned Concurrency for consistent performance if needed."
+    ];
+    return responses[Math.floor(Math.random() * responses.length)];
   };
 
-  if (!billData) {
-    return (
-      <div className="max-w-4xl mx-auto">
-        <div className="text-center py-16">
-          <MessageSquare className="h-16 w-16 text-gray-400 mx-auto mb-4" />
-          <h3 className="text-xl font-medium text-gray-900 mb-2">Chat Analysis Not Available</h3>
-          <p className="text-gray-500">Upload an AWS bill first to start chatting about your costs.</p>
-        </div>
-      </div>
-    );
-  }
-
-  if (!apiKey) {
-    return (
-      <div className="max-w-4xl mx-auto">
-        <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-6 text-center">
-          <h3 className="text-lg font-medium text-yellow-800 mb-2">API Key Required</h3>
-          <p className="text-yellow-700 mb-4">
-            Please configure your OpenAI API key in Settings to enable AI-powered chat analysis.
-          </p>
-        </div>
-      </div>
-    );
-  }
+  const suggestedQuestions = [
+    "What are my highest cost services?",
+    "How can I optimize my EC2 costs?",
+    "Show me cost trends over time",
+    "What savings opportunities do you see?"
+  ];
 
   return (
-    <div className="max-w-4xl mx-auto">
-      <div className="bg-white rounded-lg shadow-sm border border-gray-200 h-[600px] flex flex-col">
-        <div className="border-b border-gray-200 p-4">
-          <h2 className="text-lg font-semibold text-gray-900">AWS Bill Analysis Chat</h2>
-          <p className="text-sm text-gray-500">Ask me anything about your AWS costs and optimization opportunities</p>
-        </div>
+    <div className="max-w-6xl mx-auto h-[calc(100vh-12rem)]">
+      {/* Header */}
+      <div className="text-center mb-8">
+        <h1 className="text-4xl font-bold mb-4 bg-gradient-to-r from-white via-blue-100 to-purple-200 bg-clip-text text-transparent">
+          AI Cost Assistant
+        </h1>
+        <p className="text-gray-300">Ask questions about your AWS bill and get intelligent insights</p>
+      </div>
 
-        <div className="flex-1 overflow-y-auto p-4 space-y-4">
-          {messages.map((message) => (
-            <div
-              key={message.id}
-              className={`flex ${message.isBot ? 'justify-start' : 'justify-end'}`}
-            >
-              <div className={`flex max-w-xs lg:max-w-md ${message.isBot ? 'flex-row' : 'flex-row-reverse'}`}>
-                <div className={`flex-shrink-0 ${message.isBot ? 'mr-2' : 'ml-2'}`}>
-                  <div className={`w-8 h-8 rounded-full flex items-center justify-center ${
-                    message.isBot ? 'bg-blue-100' : 'bg-gray-100'
-                  }`}>
-                    {message.isBot ? (
-                      <Bot className="w-4 h-4 text-blue-600" />
-                    ) : (
-                      <User className="w-4 h-4 text-gray-600" />
-                    )}
+      <div className="relative h-full">
+        <div className="absolute inset-0 bg-gradient-to-r from-blue-500/5 to-purple-600/5 rounded-3xl blur-2xl"></div>
+        <div className="relative backdrop-blur-xl bg-white/5 border border-white/10 rounded-3xl h-full flex flex-col overflow-hidden">
+          
+          {/* Chat Messages */}
+          <div className="flex-1 overflow-y-auto p-6 space-y-4">
+            {messages.map((message) => (
+              <div
+                key={message.id}
+                className={`flex gap-3 ${message.type === 'user' ? 'justify-end' : 'justify-start'}`}
+              >
+                {message.type === 'bot' && (
+                  <div className="relative">
+                    <div className="absolute inset-0 bg-gradient-to-r from-blue-500/20 to-purple-600/20 rounded-full blur-lg"></div>
+                    <div className="relative p-3 bg-gradient-to-r from-blue-500/10 to-purple-600/10 rounded-full border border-white/20">
+                      <Bot className="h-5 w-5 text-blue-400" />
+                    </div>
+                  </div>
+                )}
+                
+                <div className={`max-w-md relative ${
+                  message.type === 'user' 
+                    ? 'bg-gradient-to-r from-blue-500 to-purple-600 text-white' 
+                    : 'backdrop-blur-xl bg-white/10 border border-white/10 text-gray-100'
+                } rounded-2xl px-4 py-3 shadow-lg`}>
+                  {message.type === 'user' && (
+                    <div className="absolute inset-0 bg-gradient-to-r from-blue-500/20 to-purple-600/20 rounded-2xl blur-xl"></div>
+                  )}
+                  <p className="relative text-sm leading-relaxed">{message.content}</p>
+                  <span className="text-xs opacity-60 mt-2 block">
+                    {message.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                  </span>
+                </div>
+
+                {message.type === 'user' && (
+                  <div className="p-3 bg-white/10 rounded-full border border-white/20">
+                    <User className="h-5 w-5 text-gray-300" />
+                  </div>
+                )}
+              </div>
+            ))}
+
+            {isTyping && (
+              <div className="flex gap-3 justify-start">
+                <div className="relative">
+                  <div className="absolute inset-0 bg-gradient-to-r from-blue-500/20 to-purple-600/20 rounded-full blur-lg"></div>
+                  <div className="relative p-3 bg-gradient-to-r from-blue-500/10 to-purple-600/10 rounded-full border border-white/20">
+                    <Bot className="h-5 w-5 text-blue-400" />
                   </div>
                 </div>
-                <div className={`px-4 py-2 rounded-lg ${
-                  message.isBot 
-                    ? 'bg-gray-100 text-gray-900' 
-                    : 'bg-blue-600 text-white'
-                }`}>
-                  <p className="text-sm">{message.text}</p>
+                <div className="backdrop-blur-xl bg-white/10 border border-white/10 rounded-2xl px-4 py-3">
+                  <div className="flex space-x-1">
+                    <div className="w-2 h-2 bg-blue-400 rounded-full animate-bounce"></div>
+                    <div className="w-2 h-2 bg-blue-400 rounded-full animate-bounce delay-100"></div>
+                    <div className="w-2 h-2 bg-blue-400 rounded-full animate-bounce delay-200"></div>
+                  </div>
                 </div>
               </div>
-            </div>
-          ))}
+            )}
+            <div ref={messagesEndRef} />
+          </div>
 
-          {isTyping && (
-            <div className="flex justify-start">
-              <div className="flex flex-row">
-                <div className="flex-shrink-0 mr-2">
-                  <div className="w-8 h-8 rounded-full bg-blue-100 flex items-center justify-center">
-                    <Bot className="w-4 h-4 text-blue-600" />
-                  </div>
-                </div>
-                <div className="bg-gray-100 px-4 py-2 rounded-lg">
-                  <div className="flex space-x-1">
-                    <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce"></div>
-                    <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '0.1s' }}></div>
-                    <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '0.2s' }}></div>
-                  </div>
-                </div>
+          {/* Suggested Questions */}
+          {messages.length <= 1 && (
+            <div className="px-6 py-4 border-t border-white/10">
+              <p className="text-sm text-gray-300 mb-3 flex items-center gap-2">
+                <Sparkles className="h-4 w-4" />
+                Try asking:
+              </p>
+              <div className="flex flex-wrap gap-2">
+                {suggestedQuestions.map((question, index) => (
+                  <button
+                    key={index}
+                    onClick={() => setInputValue(question)}
+                    className="text-xs bg-white/5 hover:bg-white/10 border border-white/10 rounded-lg px-3 py-2 text-gray-300 hover:text-white transition-all duration-200"
+                  >
+                    {question}
+                  </button>
+                ))}
               </div>
             </div>
           )}
 
-          <div ref={messagesEndRef} />
-        </div>
-
-        <div className="border-t border-gray-200 p-4">
-          <div className="flex space-x-2">
-            <input
-              type="text"
-              value={inputValue}
-              onChange={(e) => setInputValue(e.target.value)}
-              onKeyPress={handleKeyPress}
-              placeholder="Ask about your AWS costs..."
-              className="flex-1 border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-            />
-            <button
-              onClick={handleSendMessage}
-              disabled={!inputValue.trim() || isTyping}
-              className="bg-blue-600 text-white p-2 rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              <Send className="w-4 h-4" />
-            </button>
-          </div>
-          
-          <div className="mt-2 flex flex-wrap gap-2">
-            {[
-              "What are my highest cost services?",
-              "How can I optimize my EC2 costs?",
-              "Show me cost trends",
-              "Find unused resources"
-            ].map((suggestion, index) => (
-              <button
-                key={index}
-                onClick={() => setInputValue(suggestion)}
-                className="text-xs bg-gray-100 hover:bg-gray-200 text-gray-700 px-2 py-1 rounded transition-colors"
+          {/* Input Area */}
+          <div className="p-6 border-t border-white/10">
+            <div className="flex gap-3">
+              <div className="flex-1 relative">
+                <input
+                  type="text"
+                  value={inputValue}
+                  onChange={(e) => setInputValue(e.target.value)}
+                  onKeyPress={(e) => e.key === 'Enter' && handleSendMessage()}
+                  placeholder="Ask about your AWS costs..."
+                  className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white placeholder-gray-400 focus:outline-none focus:border-blue-400 focus:bg-white/10 transition-all duration-200"
+                />
+              </div>
+              <Button
+                onClick={handleSendMessage}
+                disabled={!inputValue.trim() || isTyping}
+                className="bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700 text-white px-6 py-3 rounded-xl border-0 shadow-lg shadow-blue-500/25 hover:shadow-blue-500/40 transition-all duration-300 disabled:opacity-50"
               >
-                {suggestion}
-              </button>
-            ))}
+                <Send className="h-4 w-4" />
+              </Button>
+            </div>
           </div>
         </div>
       </div>

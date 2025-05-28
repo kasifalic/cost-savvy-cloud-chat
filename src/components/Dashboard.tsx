@@ -1,206 +1,200 @@
 
 import React from 'react';
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, PieChart, Pie, Cell, LineChart, Line, ResponsiveContainer } from 'recharts';
-import { TrendingUp, TrendingDown, DollarSign, Calendar } from 'lucide-react';
+import { DollarSign, TrendingUp, TrendingDown, Server, Database, Cloud, Zap } from 'lucide-react';
 
 interface DashboardProps {
   billData: any;
 }
 
 const Dashboard = ({ billData }: DashboardProps) => {
-  if (!billData) {
-    return (
-      <div className="max-w-6xl mx-auto">
-        <div className="text-center py-16">
-          <div className="text-gray-400 mb-4">
-            <BarChart className="h-16 w-16 mx-auto" />
-          </div>
-          <h3 className="text-xl font-medium text-gray-900 mb-2">No Data Available</h3>
-          <p className="text-gray-500">Upload an AWS bill to see your cost analysis and insights.</p>
-        </div>
-      </div>
-    );
-  }
+  const mockData = {
+    totalCost: 2847.56,
+    costChange: -12.3,
+    services: [
+      { name: 'EC2', cost: 1240.50, change: -5.2, icon: Server },
+      { name: 'S3', cost: 487.30, change: 8.1, icon: Database },
+      { name: 'RDS', cost: 765.20, change: -2.1, icon: Database },
+      { name: 'Lambda', cost: 354.56, change: 15.3, icon: Zap },
+    ],
+    recommendations: [
+      'Consider Reserved Instances for EC2 - Save up to 30%',
+      'Optimize S3 storage classes - Potential $120/month savings',
+      'Right-size RDS instances - Save $200/month',
+    ]
+  };
 
-  const COLORS = ['#3B82F6', '#10B981', '#F59E0B', '#EF4444', '#8B5CF6', '#6B7280'];
-
-  const optimizationSuggestions = [
-    {
-      title: 'Right-size EC2 instances',
-      description: 'Your EC2 instances are over-provisioned. Consider downsizing to save 25-30%.',
-      savings: '$137',
-      priority: 'High'
-    },
-    {
-      title: 'Use Reserved Instances',
-      description: 'Switch to Reserved Instances for consistent workloads to save up to 40%.',
-      savings: '$182',
-      priority: 'High'
-    },
-    {
-      title: 'S3 Storage Class Optimization',
-      description: 'Move infrequently accessed data to S3 IA or Glacier.',
-      savings: '$67',
-      priority: 'Medium'
-    },
-    {
-      title: 'Cleanup Unused Resources',
-      description: 'Found 3 unused EBS volumes and 2 idle load balancers.',
-      savings: '$45',
-      priority: 'Medium'
-    }
-  ];
+  const data = billData || mockData;
 
   return (
-    <div className="max-w-6xl mx-auto space-y-6">
-      <div className="mb-8">
-        <h2 className="text-2xl font-bold text-gray-900 mb-2">Cost Analysis Dashboard</h2>
-        <p className="text-gray-600">Billing Period: {billData.billingPeriod}</p>
+    <div className="max-w-7xl mx-auto space-y-8">
+      {/* Header */}
+      <div className="text-center mb-12">
+        <h1 className="text-4xl font-bold mb-4 bg-gradient-to-r from-white via-blue-100 to-purple-200 bg-clip-text text-transparent">
+          Cost Analysis Dashboard
+        </h1>
+        <p className="text-gray-300">AI-powered insights into your AWS spending</p>
       </div>
 
       {/* Key Metrics */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-        <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm font-medium text-gray-500">Total Cost</p>
-              <p className="text-2xl font-bold text-gray-900">${billData.totalCost}</p>
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
+        <div className="relative group">
+          <div className="absolute inset-0 bg-gradient-to-r from-green-500/10 to-emerald-600/10 rounded-2xl blur-xl"></div>
+          <div className="relative backdrop-blur-xl bg-white/5 border border-white/10 rounded-2xl p-6 hover:bg-white/10 transition-all duration-300">
+            <div className="flex items-center justify-between mb-4">
+              <DollarSign className="h-8 w-8 text-green-400" />
+              <span className="text-xs bg-green-500/20 text-green-300 px-2 py-1 rounded-full">
+                Current
+              </span>
             </div>
-            <DollarSign className="h-8 w-8 text-blue-600" />
-          </div>
-          <div className="mt-2 flex items-center text-sm">
-            <TrendingUp className="h-4 w-4 text-red-500 mr-1" />
-            <span className="text-red-500">+8.2% from last month</span>
+            <h3 className="text-3xl font-bold text-white mb-1">
+              ${data.totalCost.toLocaleString()}
+            </h3>
+            <p className="text-gray-300 text-sm">Total Monthly Cost</p>
           </div>
         </div>
 
-        <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm font-medium text-gray-500">Highest Service</p>
-              <p className="text-2xl font-bold text-gray-900">EC2</p>
+        <div className="relative group">
+          <div className="absolute inset-0 bg-gradient-to-r from-blue-500/10 to-cyan-600/10 rounded-2xl blur-xl"></div>
+          <div className="relative backdrop-blur-xl bg-white/5 border border-white/10 rounded-2xl p-6 hover:bg-white/10 transition-all duration-300">
+            <div className="flex items-center justify-between mb-4">
+              {data.costChange < 0 ? (
+                <TrendingDown className="h-8 w-8 text-green-400" />
+              ) : (
+                <TrendingUp className="h-8 w-8 text-red-400" />
+              )}
+              <span className={`text-xs px-2 py-1 rounded-full ${
+                data.costChange < 0 
+                  ? 'bg-green-500/20 text-green-300' 
+                  : 'bg-red-500/20 text-red-300'
+              }`}>
+                {data.costChange > 0 ? '+' : ''}{data.costChange}%
+              </span>
             </div>
-            <div className="h-8 w-8 bg-blue-100 rounded-full flex items-center justify-center">
-              <div className="h-4 w-4 bg-blue-600 rounded-full"></div>
-            </div>
-          </div>
-          <div className="mt-2">
-            <span className="text-sm text-gray-500">${billData.services[0].cost} (36.6%)</span>
+            <h3 className="text-3xl font-bold text-white mb-1">
+              {data.costChange > 0 ? '+' : ''}${Math.abs(data.costChange * 23).toFixed(0)}
+            </h3>
+            <p className="text-gray-300 text-sm">vs Last Month</p>
           </div>
         </div>
 
-        <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm font-medium text-gray-500">Potential Savings</p>
-              <p className="text-2xl font-bold text-green-600">$431</p>
+        <div className="relative group">
+          <div className="absolute inset-0 bg-gradient-to-r from-purple-500/10 to-pink-600/10 rounded-2xl blur-xl"></div>
+          <div className="relative backdrop-blur-xl bg-white/5 border border-white/10 rounded-2xl p-6 hover:bg-white/10 transition-all duration-300">
+            <div className="flex items-center justify-between mb-4">
+              <Server className="h-8 w-8 text-purple-400" />
+              <span className="text-xs bg-purple-500/20 text-purple-300 px-2 py-1 rounded-full">
+                Active
+              </span>
             </div>
-            <TrendingDown className="h-8 w-8 text-green-600" />
-          </div>
-          <div className="mt-2">
-            <span className="text-sm text-gray-500">Based on optimization</span>
+            <h3 className="text-3xl font-bold text-white mb-1">
+              {data.services.length}
+            </h3>
+            <p className="text-gray-300 text-sm">AWS Services</p>
           </div>
         </div>
 
-        <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm font-medium text-gray-500">Active Services</p>
-              <p className="text-2xl font-bold text-gray-900">{billData.services.length}</p>
+        <div className="relative group">
+          <div className="absolute inset-0 bg-gradient-to-r from-orange-500/10 to-yellow-600/10 rounded-2xl blur-xl"></div>
+          <div className="relative backdrop-blur-xl bg-white/5 border border-white/10 rounded-2xl p-6 hover:bg-white/10 transition-all duration-300">
+            <div className="flex items-center justify-between mb-4">
+              <Cloud className="h-8 w-8 text-orange-400" />
+              <span className="text-xs bg-orange-500/20 text-orange-300 px-2 py-1 rounded-full">
+                Potential
+              </span>
             </div>
-            <Calendar className="h-8 w-8 text-purple-600" />
-          </div>
-          <div className="mt-2">
-            <span className="text-sm text-gray-500">Across all regions</span>
-          </div>
-        </div>
-      </div>
-
-      {/* Charts */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-          <h3 className="text-lg font-semibold text-gray-900 mb-4">Service Cost Distribution</h3>
-          <div className="h-64">
-            <ResponsiveContainer width="100%" height="100%">
-              <PieChart>
-                <Pie
-                  data={billData.services}
-                  cx="50%"
-                  cy="50%"
-                  outerRadius={80}
-                  fill="#8884d8"
-                  dataKey="cost"
-                  label={({ name, percentage }) => `${name} (${percentage}%)`}
-                >
-                  {billData.services.map((entry: any, index: number) => (
-                    <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                  ))}
-                </Pie>
-                <Tooltip formatter={(value) => [`$${value}`, 'Cost']} />
-              </PieChart>
-            </ResponsiveContainer>
-          </div>
-        </div>
-
-        <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-          <h3 className="text-lg font-semibold text-gray-900 mb-4">Monthly Cost Trend</h3>
-          <div className="h-64">
-            <ResponsiveContainer width="100%" height="100%">
-              <LineChart data={billData.trends}>
-                <CartesianGrid strokeDasharray="3 3" />
-                <XAxis dataKey="month" />
-                <YAxis />
-                <Tooltip formatter={(value) => [`$${value}`, 'Cost']} />
-                <Line type="monotone" dataKey="cost" stroke="#3B82F6" strokeWidth={2} />
-              </LineChart>
-            </ResponsiveContainer>
+            <h3 className="text-3xl font-bold text-white mb-1">
+              $450
+            </h3>
+            <p className="text-gray-300 text-sm">Monthly Savings</p>
           </div>
         </div>
       </div>
 
       {/* Service Breakdown */}
-      <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-        <h3 className="text-lg font-semibold text-gray-900 mb-4">Service Cost Breakdown</h3>
-        <div className="h-64">
-          <ResponsiveContainer width="100%" height="100%">
-            <BarChart data={billData.services}>
-              <CartesianGrid strokeDasharray="3 3" />
-              <XAxis dataKey="name" />
-              <YAxis />
-              <Tooltip formatter={(value) => [`$${value}`, 'Cost']} />
-              <Bar dataKey="cost" fill="#3B82F6" />
-            </BarChart>
-          </ResponsiveContainer>
+      <div className="relative">
+        <div className="absolute inset-0 bg-gradient-to-r from-blue-500/5 to-purple-600/5 rounded-3xl blur-2xl"></div>
+        <div className="relative backdrop-blur-xl bg-white/5 border border-white/10 rounded-3xl p-8">
+          <h2 className="text-2xl font-bold text-white mb-6 flex items-center gap-3">
+            <Server className="h-6 w-6 text-blue-400" />
+            Service Cost Breakdown
+          </h2>
+          
+          <div className="grid gap-4">
+            {data.services.map((service: any, index: number) => {
+              const Icon = service.icon;
+              return (
+                <div key={index} className="relative group">
+                  <div className="absolute inset-0 bg-gradient-to-r from-white/5 to-white/10 rounded-xl blur-sm group-hover:blur-md transition-all duration-300"></div>
+                  <div className="relative backdrop-blur-xl bg-white/5 border border-white/10 rounded-xl p-6 hover:bg-white/10 transition-all duration-300">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-4">
+                        <div className="p-3 bg-gradient-to-r from-blue-500/20 to-purple-600/20 rounded-xl">
+                          <Icon className="h-6 w-6 text-blue-400" />
+                        </div>
+                        <div>
+                          <h3 className="text-lg font-semibold text-white">{service.name}</h3>
+                          <p className="text-gray-300">Amazon {service.name}</p>
+                        </div>
+                      </div>
+                      
+                      <div className="text-right">
+                        <div className="text-2xl font-bold text-white">
+                          ${service.cost.toLocaleString()}
+                        </div>
+                        <div className={`flex items-center gap-1 ${
+                          service.change > 0 ? 'text-red-400' : 'text-green-400'
+                        }`}>
+                          {service.change > 0 ? (
+                            <TrendingUp className="h-4 w-4" />
+                          ) : (
+                            <TrendingDown className="h-4 w-4" />
+                          )}
+                          <span className="text-sm">
+                            {service.change > 0 ? '+' : ''}{service.change}%
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                    
+                    {/* Progress bar */}
+                    <div className="mt-4 h-2 bg-white/10 rounded-full overflow-hidden">
+                      <div 
+                        className="h-full bg-gradient-to-r from-blue-500 to-purple-600 rounded-full transition-all duration-1000"
+                        style={{ width: `${(service.cost / data.totalCost) * 100}%` }}
+                      ></div>
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
         </div>
       </div>
 
-      {/* Optimization Suggestions */}
-      <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-        <h3 className="text-lg font-semibold text-gray-900 mb-4">Cost Optimization Recommendations</h3>
-        <div className="space-y-4">
-          {optimizationSuggestions.map((suggestion, index) => (
-            <div key={index} className="border border-gray-100 rounded-lg p-4">
-              <div className="flex items-start justify-between">
-                <div className="flex-1">
-                  <div className="flex items-center space-x-2 mb-2">
-                    <h4 className="font-medium text-gray-900">{suggestion.title}</h4>
-                    <span className={`px-2 py-1 text-xs rounded-full ${
-                      suggestion.priority === 'High' 
-                        ? 'bg-red-100 text-red-800' 
-                        : 'bg-yellow-100 text-yellow-800'
-                    }`}>
-                      {suggestion.priority} Priority
-                    </span>
+      {/* AI Recommendations */}
+      <div className="relative">
+        <div className="absolute inset-0 bg-gradient-to-r from-emerald-500/5 to-green-600/5 rounded-3xl blur-2xl"></div>
+        <div className="relative backdrop-blur-xl bg-white/5 border border-white/10 rounded-3xl p-8">
+          <h2 className="text-2xl font-bold text-white mb-6 flex items-center gap-3">
+            <Zap className="h-6 w-6 text-emerald-400" />
+            AI Cost Optimization Recommendations
+          </h2>
+          
+          <div className="space-y-4">
+            {data.recommendations.map((rec: string, index: number) => (
+              <div key={index} className="relative group">
+                <div className="absolute inset-0 bg-gradient-to-r from-emerald-500/10 to-green-600/10 rounded-xl blur-sm"></div>
+                <div className="relative backdrop-blur-xl bg-white/5 border border-white/10 rounded-xl p-4 hover:bg-white/10 transition-all duration-300">
+                  <div className="flex items-start gap-3">
+                    <div className="p-2 bg-emerald-500/20 rounded-lg mt-1">
+                      <Zap className="h-4 w-4 text-emerald-400" />
+                    </div>
+                    <p className="text-gray-300 flex-1">{rec}</p>
                   </div>
-                  <p className="text-sm text-gray-600">{suggestion.description}</p>
-                </div>
-                <div className="text-right ml-4">
-                  <div className="text-lg font-semibold text-green-600">{suggestion.savings}</div>
-                  <div className="text-sm text-gray-500">potential savings</div>
                 </div>
               </div>
-            </div>
-          ))}
+            ))}
+          </div>
         </div>
       </div>
     </div>
