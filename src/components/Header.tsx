@@ -1,9 +1,6 @@
 
 import React from 'react';
-import { FileText, BarChart3, MessageSquare, Settings, LogOut } from 'lucide-react';
-import { Button } from './ui/button';
-import { useAuth } from './AuthWrapper';
-import { supabase } from '../integrations/supabase/client';
+import { FileText, BarChart3, MessageSquare, Settings } from 'lucide-react';
 
 interface HeaderProps {
   activeTab: 'upload' | 'dashboard' | 'chat' | 'settings';
@@ -11,12 +8,6 @@ interface HeaderProps {
 }
 
 const Header = ({ activeTab, setActiveTab }: HeaderProps) => {
-  const { user } = useAuth();
-
-  const handleLogout = async () => {
-    await supabase.auth.signOut();
-  };
-
   const tabs = [
     { id: 'upload' as const, label: 'Upload', icon: FileText },
     { id: 'dashboard' as const, label: 'Dashboard', icon: BarChart3 },
@@ -37,7 +28,7 @@ const Header = ({ activeTab, setActiveTab }: HeaderProps) => {
             </h1>
           </div>
 
-          <nav className="hidden md:flex items-center gap-2">
+          <nav className="flex items-center gap-2">
             {tabs.map((tab) => {
               const Icon = tab.icon;
               return (
@@ -56,21 +47,6 @@ const Header = ({ activeTab, setActiveTab }: HeaderProps) => {
               );
             })}
           </nav>
-
-          <div className="flex items-center gap-4">
-            <span className="text-sm text-black">
-              {user?.email}
-            </span>
-            <Button
-              onClick={handleLogout}
-              variant="outline"
-              size="sm"
-              className="flex items-center gap-2 border-white/20 text-black hover:bg-white/10"
-            >
-              <LogOut className="h-4 w-4" />
-              Logout
-            </Button>
-          </div>
         </div>
       </div>
     </header>

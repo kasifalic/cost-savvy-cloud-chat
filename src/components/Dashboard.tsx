@@ -2,7 +2,6 @@
 import React, { useEffect, useState } from 'react';
 import { DollarSign, TrendingUp, TrendingDown, Server, Database, Cloud, Zap } from 'lucide-react';
 import { supabase } from '../integrations/supabase/client';
-import { useAuth } from './AuthWrapper';
 
 interface Service {
   name: string;
@@ -15,11 +14,7 @@ interface InvoiceData {
   id: string;
   total_cost: number;
   billing_period: string;
-  services_data: {
-    services: Service[];
-    costChange: number;
-    recommendations: string[];
-  };
+  services_data: any;
 }
 
 interface DashboardProps {
@@ -29,17 +24,13 @@ interface DashboardProps {
 const Dashboard = ({ billData }: DashboardProps) => {
   const [invoiceData, setInvoiceData] = useState<InvoiceData | null>(null);
   const [loading, setLoading] = useState(true);
-  const { user } = useAuth();
 
   useEffect(() => {
     const fetchLatestInvoice = async () => {
-      if (!user) return;
-
       try {
         const { data, error } = await supabase
           .from('aws_invoices')
           .select('*')
-          .eq('user_id', user.id)
           .eq('processing_status', 'completed')
           .order('upload_date', { ascending: false })
           .limit(1);
@@ -60,7 +51,7 @@ const Dashboard = ({ billData }: DashboardProps) => {
     };
 
     fetchLatestInvoice();
-  }, [user, billData]);
+  }, [billData]);
 
   const mockData = {
     total_cost: 2847.56,
