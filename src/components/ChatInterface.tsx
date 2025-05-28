@@ -1,32 +1,34 @@
 
 import React, { useState, useRef, useEffect } from 'react';
-import { Send, Bot, User, Sparkles, MessageSquare } from 'lucide-react';
-import { Button } from '../components/ui/button';
-
-interface ChatInterfaceProps {
-  billData: any;
-  apiKey: string;
-}
+import { Send, Bot, User, Sparkles } from 'lucide-react';
+import { Button } from './ui/button';
+import { supabase } from '../integrations/supabase/client';
+import { useAuth } from './AuthWrapper';
 
 interface Message {
   id: string;
-  type: 'user' | 'bot';
   content: string;
+  sender: 'user' | 'assistant';
   timestamp: Date;
 }
 
-const ChatInterface = ({ billData, apiKey }: ChatInterfaceProps) => {
+interface ChatInterfaceProps {
+  billData: any;
+}
+
+const ChatInterface = ({ billData }: ChatInterfaceProps) => {
   const [messages, setMessages] = useState<Message[]>([
     {
       id: '1',
-      type: 'bot',
-      content: "Hi! I'm your AWS cost optimization assistant powered by Groq AI. I've analyzed your bill and I'm ready to help you understand your costs and find savings opportunities. What would you like to know?",
-      timestamp: new Date()
-    }
+      content: "Hi! I'm your AWS cost optimization assistant. Upload your AWS bill first, then ask me anything about your costs, usage patterns, or how to save money on your AWS services.",
+      sender: 'assistant',
+      timestamp: new Date(),
+    },
   ]);
-  const [inputValue, setInputValue] = useState('');
-  const [isTyping, setIsTyping] = useState(false);
+  const [inputMessage, setInputMessage] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const { user } = useAuth();
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -37,182 +39,161 @@ const ChatInterface = ({ billData, apiKey }: ChatInterfaceProps) => {
   }, [messages]);
 
   const handleSendMessage = async () => {
-    if (!inputValue.trim()) return;
+    if (!inputMessage.trim() || isLoading) return;
 
     const userMessage: Message = {
       id: Date.now().toString(),
-      type: 'user',
-      content: inputValue,
-      timestamp: new Date()
+      content: inputMessage,
+      sender: 'user',
+      timestamp: new Date(),
     };
 
     setMessages(prev => [...prev, userMessage]);
-    const currentInput = inputValue;
-    setInputValue('');
-    setIsTyping(true);
+    setInputMessage('');
+    setIsLoading(true);
 
     try {
-      // Call Groq AI via edge function
-      const response = await fetch('/api/chat-with-groq', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          message: currentInput,
-          billData: billData
-        }),
+      const { data, error } = await supabase.functions.invoke('chat-aws-assistant', {
+        body: {
+          message: inputMessage,
+          userId: user?.id
+        }
       });
 
-      if (!response.ok) {
-        throw new Error('Failed to get AI response');
+      if (error) {
+        throw error;
       }
 
-      const data = await response.json();
-      
-      const botResponse: Message = {
+      const assistantMessage: Message = {
         id: (Date.now() + 1).toString(),
-        type: 'bot',
-        content: data.response,
-        timestamp: new Date()
+        content: data.message || 'Sorry, I encountered an error processing your request.',
+        sender: 'assistant',
+        timestamp: new Date(),
       };
-      
-      setMessages(prev => [...prev, botResponse]);
+
+      setMessages(prev => [...prev, assistantMessage]);
     } catch (error) {
-      console.error('Error calling Groq AI:', error);
-      const errorResponse: Message = {
+      console.error('Error sending message:', error);
+      const errorMessage: Message = {
         id: (Date.now() + 1).toString(),
-        type: 'bot',
-        content: "I apologize, but I'm having trouble connecting to the AI service right now. Please try again later.",
-        timestamp: new Date()
+        content: 'Sorry, I encountered an error. Please make sure you have uploaded your AWS bill and try again.',
+        sender: 'assistant',
+        timestamp: new Date(),
       };
-      setMessages(prev => [...prev, errorResponse]);
+      setMessages(prev => [...prev, errorMessage]);
     } finally {
-      setIsTyping(false);
+      setIsLoading(false);
     }
   };
 
-  const suggestedQuestions = [
-    "What are my highest cost services?",
-    "How can I optimize my EC2 costs?",
-    "Show me cost trends over time",
-    "What savings opportunities do you see?"
-  ];
+  const handleKeyPress = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      handleSendMessage();
+    }
+  };
 
   return (
-    <div className="max-w-6xl mx-auto h-[calc(100vh-12rem)]">
+    <div className="max-w-4xl mx-auto h-[600px] flex flex-col">
       {/* Header */}
-      <div className="text-center mb-8">
-        <h1 className="text-4xl font-bold mb-4 bg-gradient-to-r from-black via-gray-800 to-gray-600 bg-clip-text text-transparent">
-          AI Cost Assistant
-        </h1>
-        <p className="text-black">Ask questions about your AWS bill and get intelligent insights powered by Groq AI</p>
+      <div className="relative mb-6">
+        <div className="absolute inset-0 bg-gradient-to-r from-teal-500/5 to-orange-600/5 rounded-2xl blur-xl"></div>
+        <div className="relative backdrop-blur-xl bg-white/5 border border-white/10 rounded-2xl p-6">
+          <div className="flex items-center gap-4">
+            <div className="p-3 bg-gradient-to-r from-teal-500/20 to-orange-600/20 rounded-xl">
+              <Bot className="h-6 w-6 text-teal-400" />
+            </div>
+            <div>
+              <h2 className="text-2xl font-bold text-black">AWS Cost Assistant</h2>
+              <p className="text-black">Ask me anything about your AWS costs and optimization strategies</p>
+            </div>
+          </div>
+        </div>
       </div>
 
-      <div className="relative h-full">
-        <div className="absolute inset-0 bg-gradient-to-r from-teal-500/5 to-orange-600/5 rounded-3xl blur-2xl"></div>
-        <div className="relative backdrop-blur-xl bg-white/5 border border-white/10 rounded-3xl h-full flex flex-col overflow-hidden">
-          
-          {/* Chat Messages */}
-          <div className="flex-1 overflow-y-auto p-6 space-y-4">
+      {/* Messages Container */}
+      <div className="relative flex-1 mb-4">
+        <div className="absolute inset-0 bg-gradient-to-r from-teal-500/5 to-orange-600/5 rounded-2xl blur-xl"></div>
+        <div className="relative backdrop-blur-xl bg-white/5 border border-white/10 rounded-2xl p-4 h-full overflow-hidden">
+          <div className="h-full overflow-y-auto space-y-4 pr-2">
             {messages.map((message) => (
               <div
                 key={message.id}
-                className={`flex gap-3 ${message.type === 'user' ? 'justify-end' : 'justify-start'}`}
+                className={`flex gap-3 ${
+                  message.sender === 'user' ? 'justify-end' : 'justify-start'
+                }`}
               >
-                {message.type === 'bot' && (
-                  <div className="relative">
-                    <div className="absolute inset-0 bg-gradient-to-r from-teal-500/20 to-orange-600/20 rounded-full blur-lg"></div>
-                    <div className="relative p-3 bg-gradient-to-r from-teal-500/10 to-orange-600/10 rounded-full border border-white/20">
-                      <Bot className="h-5 w-5 text-teal-400" />
-                    </div>
+                {message.sender === 'assistant' && (
+                  <div className="p-2 bg-gradient-to-r from-teal-500/20 to-orange-600/20 rounded-lg">
+                    <Bot className="h-5 w-5 text-teal-400" />
                   </div>
                 )}
                 
-                <div className={`max-w-md relative ${
-                  message.type === 'user' 
-                    ? 'bg-gradient-to-r from-teal-500 to-orange-600 text-white' 
-                    : 'backdrop-blur-xl bg-white/10 border border-white/10 text-black'
-                } rounded-2xl px-4 py-3 shadow-lg`}>
-                  {message.type === 'user' && (
-                    <div className="absolute inset-0 bg-gradient-to-r from-teal-500/20 to-orange-600/20 rounded-2xl blur-xl"></div>
-                  )}
-                  <p className="relative text-sm leading-relaxed">{message.content}</p>
-                  <span className="text-xs opacity-60 mt-2 block">
-                    {message.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                  </span>
+                <div
+                  className={`max-w-[80%] p-4 rounded-2xl ${
+                    message.sender === 'user'
+                      ? 'bg-gradient-to-r from-teal-500 to-orange-600 text-white'
+                      : 'bg-white/10 border border-white/20 text-black'
+                  }`}
+                >
+                  <p className="text-sm leading-relaxed whitespace-pre-wrap">
+                    {message.content}
+                  </p>
+                  <p className={`text-xs mt-2 opacity-70 ${
+                    message.sender === 'user' ? 'text-white' : 'text-black'
+                  }`}>
+                    {message.timestamp.toLocaleTimeString()}
+                  </p>
                 </div>
 
-                {message.type === 'user' && (
-                  <div className="p-3 bg-white/10 rounded-full border border-white/20">
-                    <User className="h-5 w-5 text-gray-600" />
+                {message.sender === 'user' && (
+                  <div className="p-2 bg-gradient-to-r from-teal-500/20 to-orange-600/20 rounded-lg">
+                    <User className="h-5 w-5 text-teal-400" />
                   </div>
                 )}
               </div>
             ))}
-
-            {isTyping && (
+            
+            {isLoading && (
               <div className="flex gap-3 justify-start">
-                <div className="relative">
-                  <div className="absolute inset-0 bg-gradient-to-r from-teal-500/20 to-orange-600/20 rounded-full blur-lg"></div>
-                  <div className="relative p-3 bg-gradient-to-r from-teal-500/10 to-orange-600/10 rounded-full border border-white/20">
-                    <Bot className="h-5 w-5 text-teal-400" />
-                  </div>
+                <div className="p-2 bg-gradient-to-r from-teal-500/20 to-orange-600/20 rounded-lg">
+                  <Bot className="h-5 w-5 text-teal-400" />
                 </div>
-                <div className="backdrop-blur-xl bg-white/10 border border-white/10 rounded-2xl px-4 py-3">
-                  <div className="flex space-x-1">
-                    <div className="w-2 h-2 bg-teal-400 rounded-full animate-bounce"></div>
-                    <div className="w-2 h-2 bg-teal-400 rounded-full animate-bounce delay-100"></div>
-                    <div className="w-2 h-2 bg-teal-400 rounded-full animate-bounce delay-200"></div>
+                <div className="bg-white/10 border border-white/20 p-4 rounded-2xl">
+                  <div className="flex items-center gap-2">
+                    <Sparkles className="h-4 w-4 text-teal-400 animate-pulse" />
+                    <span className="text-black text-sm">Thinking...</span>
                   </div>
                 </div>
               </div>
             )}
+            
             <div ref={messagesEndRef} />
           </div>
+        </div>
+      </div>
 
-          {/* Suggested Questions */}
-          {messages.length <= 1 && (
-            <div className="px-6 py-4 border-t border-white/10">
-              <p className="text-sm text-black mb-3 flex items-center gap-2">
-                <Sparkles className="h-4 w-4" />
-                Try asking:
-              </p>
-              <div className="flex flex-wrap gap-2">
-                {suggestedQuestions.map((question, index) => (
-                  <button
-                    key={index}
-                    onClick={() => setInputValue(question)}
-                    className="text-xs bg-white/5 hover:bg-white/10 border border-white/10 rounded-lg px-3 py-2 text-black hover:text-gray-800 transition-all duration-200"
-                  >
-                    {question}
-                  </button>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {/* Input Area */}
-          <div className="p-6 border-t border-white/10">
-            <div className="flex gap-3">
-              <div className="flex-1 relative">
-                <input
-                  type="text"
-                  value={inputValue}
-                  onChange={(e) => setInputValue(e.target.value)}
-                  onKeyPress={(e) => e.key === 'Enter' && handleSendMessage()}
-                  placeholder="Ask about your AWS costs..."
-                  className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-black placeholder-gray-500 focus:outline-none focus:border-teal-400 focus:bg-white/10 transition-all duration-200"
-                />
-              </div>
-              <Button
-                onClick={handleSendMessage}
-                disabled={!inputValue.trim() || isTyping}
-                className="bg-gradient-to-r from-teal-500 to-orange-600 hover:from-teal-600 hover:to-orange-700 text-white px-6 py-3 rounded-xl border-0 shadow-lg shadow-teal-500/25 hover:shadow-teal-500/40 transition-all duration-300 disabled:opacity-50"
-              >
-                <Send className="h-4 w-4" />
-              </Button>
-            </div>
+      {/* Input Area */}
+      <div className="relative">
+        <div className="absolute inset-0 bg-gradient-to-r from-teal-500/5 to-orange-600/5 rounded-2xl blur-xl"></div>
+        <div className="relative backdrop-blur-xl bg-white/5 border border-white/10 rounded-2xl p-4">
+          <div className="flex gap-4">
+            <textarea
+              value={inputMessage}
+              onChange={(e) => setInputMessage(e.target.value)}
+              onKeyPress={handleKeyPress}
+              placeholder="Ask me about your AWS costs, optimization strategies, or specific services..."
+              className="flex-1 bg-white/10 border border-white/20 rounded-xl p-3 text-black placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent resize-none"
+              rows={2}
+              disabled={isLoading}
+            />
+            <Button
+              onClick={handleSendMessage}
+              disabled={!inputMessage.trim() || isLoading}
+              className="self-end bg-gradient-to-r from-teal-500 to-orange-600 hover:from-teal-600 hover:to-orange-700 text-white border-0 shadow-xl shadow-teal-500/25 hover:shadow-teal-500/40 transition-all duration-300"
+            >
+              <Send className="h-4 w-4" />
+            </Button>
           </div>
         </div>
       </div>

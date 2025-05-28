@@ -1,29 +1,94 @@
 
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { DollarSign, TrendingUp, TrendingDown, Server, Database, Cloud, Zap } from 'lucide-react';
+import { supabase } from '../integrations/supabase/client';
+import { useAuth } from './AuthWrapper';
 
 interface DashboardProps {
   billData: any;
 }
 
 const Dashboard = ({ billData }: DashboardProps) => {
-  const mockData = {
-    totalCost: 2847.56,
-    costChange: -12.3,
-    services: [
-      { name: 'EC2', cost: 1240.50, change: -5.2, icon: Server },
-      { name: 'S3', cost: 487.30, change: 8.1, icon: Database },
-      { name: 'RDS', cost: 765.20, change: -2.1, icon: Database },
-      { name: 'Lambda', cost: 354.56, change: 15.3, icon: Zap },
-    ],
-    recommendations: [
-      'Consider Reserved Instances for EC2 - Save up to 30%',
-      'Optimize S3 storage classes - Potential $120/month savings',
-      'Right-size RDS instances - Save $200/month',
-    ]
+  const [invoiceData, setInvoiceData] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
+  const { user } = useAuth();
+
+  useEffect(() => {
+    const fetchLatestInvoice = async () => {
+      if (!user) return;
+
+      try {
+        const { data, error } = await supabase
+          .from('aws_invoices')
+          .select('*')
+          .eq('user_id', user.id)
+          .eq('processing_status', 'completed')
+          .order('upload_date', { ascending: false })
+          .limit(1);
+
+        if (error) {
+          console.error('Error fetching invoice:', error);
+          return;
+        }
+
+        if (data && data.length > 0) {
+          setInvoiceData(data[0]);
+        }
+      } catch (error) {
+        console.error('Error:', error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchLatestInvoice();
+  }, [user, billData]);
+
+  // Use real data if available, otherwise fall back to mock data
+  const data = invoiceData || {
+    total_cost: 2847.56,
+    services_data: {
+      costChange: -12.3,
+      services: [
+        { name: 'EC2', cost: 1240.50, change: -5.2, description: 'Elastic Compute Cloud' },
+        { name: 'S3', cost: 487.30, change: 8.1, description: 'Simple Storage Service' },
+        { name: 'RDS', cost: 765.20, change: -2.1, description: 'Relational Database Service' },
+        { name: 'Lambda', cost: 354.56, change: 15.3, description: 'Serverless Functions' },
+      ],
+      recommendations: [
+        'Consider Reserved Instances for EC2 - Save up to 30%',
+        'Optimize S3 storage classes - Potential $120/month savings',
+        'Right-size RDS instances - Save $200/month',
+      ]
+    }
   };
 
-  const data = billData || mockData;
+  const totalCost = data.total_cost || 0;
+  const costChange = data.services_data?.costChange || 0;
+  const services = data.services_data?.services || [];
+  const recommendations = data.services_data?.recommendations || [];
+
+  const getServiceIcon = (serviceName: string) => {
+    switch (serviceName.toLowerCase()) {
+      case 'ec2': return Server;
+      case 's3': return Database;
+      case 'rds': return Database;
+      case 'lambda': return Zap;
+      default: return Cloud;
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className="max-w-7xl mx-auto space-y-8">
+        <div className="text-center">
+          <h1 className="text-4xl font-bold mb-4 bg-gradient-to-r from-black via-gray-800 to-gray-600 bg-clip-text text-transparent">
+            Loading Dashboard...
+          </h1>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="max-w-7xl mx-auto space-y-8">
@@ -32,7 +97,9 @@ const Dashboard = ({ billData }: DashboardProps) => {
         <h1 className="text-4xl font-bold mb-4 bg-gradient-to-r from-black via-gray-800 to-gray-600 bg-clip-text text-transparent">
           Cost Analysis Dashboard
         </h1>
-        <p className="text-black">AI-powered insights into your AWS spending</p>
+        <p className="text-black">
+          {invoiceData ? 'Real data from your AWS invoice' : 'Upload your AWS bill to see real data'}
+        </p>
       </div>
 
       {/* Key Metrics */}
@@ -47,7 +114,7 @@ const Dashboard = ({ billData }: DashboardProps) => {
               </span>
             </div>
             <h3 className="text-3xl font-bold text-black mb-1">
-              ${(data.totalCost || 0).toLocaleString()}
+              ${totalCost.toLocaleString()}
             </h3>
             <p className="text-black text-sm">Total Monthly Cost</p>
           </div>
@@ -57,21 +124,21 @@ const Dashboard = ({ billData }: DashboardProps) => {
           <div className="absolute inset-0 bg-gradient-to-r from-teal-500/10 to-cyan-600/10 rounded-2xl blur-xl"></div>
           <div className="relative backdrop-blur-xl bg-white/5 border border-white/10 rounded-2xl p-6 hover:bg-white/10 transition-all duration-300">
             <div className="flex items-center justify-between mb-4">
-              {(data.costChange || 0) < 0 ? (
+              {costChange < 0 ? (
                 <TrendingDown className="h-8 w-8 text-emerald-400" />
               ) : (
                 <TrendingUp className="h-8 w-8 text-red-400" />
               )}
               <span className={`text-xs px-2 py-1 rounded-full ${
-                (data.costChange || 0) < 0 
+                costChange < 0 
                   ? 'bg-emerald-500/20 text-emerald-300' 
                   : 'bg-red-500/20 text-red-300'
               }`}>
-                {(data.costChange || 0) > 0 ? '+' : ''}{data.costChange || 0}%
+                {costChange > 0 ? '+' : ''}{costChange}%
               </span>
             </div>
             <h3 className="text-3xl font-bold text-black mb-1">
-              {(data.costChange || 0) > 0 ? '+' : ''}${Math.abs((data.costChange || 0) * 23).toFixed(0)}
+              {costChange > 0 ? '+' : ''}${Math.abs(costChange * 23).toFixed(0)}
             </h3>
             <p className="text-black text-sm">vs Last Month</p>
           </div>
@@ -87,7 +154,7 @@ const Dashboard = ({ billData }: DashboardProps) => {
               </span>
             </div>
             <h3 className="text-3xl font-bold text-black mb-1">
-              {(data.services || []).length}
+              {services.length}
             </h3>
             <p className="text-black text-sm">AWS Services</p>
           </div>
@@ -120,8 +187,8 @@ const Dashboard = ({ billData }: DashboardProps) => {
           </h2>
           
           <div className="grid gap-4">
-            {(data.services || []).map((service: any, index: number) => {
-              const Icon = service.icon || Server;
+            {services.map((service: any, index: number) => {
+              const Icon = getServiceIcon(service.name);
               const serviceCost = service.cost || 0;
               const serviceChange = service.change || 0;
               
@@ -135,8 +202,8 @@ const Dashboard = ({ billData }: DashboardProps) => {
                           <Icon className="h-6 w-6 text-teal-400" />
                         </div>
                         <div>
-                          <h3 className="text-lg font-semibold text-black">{service.name || 'Unknown Service'}</h3>
-                          <p className="text-black">Amazon {service.name || 'Service'}</p>
+                          <h3 className="text-lg font-semibold text-black">{service.name}</h3>
+                          <p className="text-black">{service.description || `Amazon ${service.name}`}</p>
                         </div>
                       </div>
                       
@@ -163,7 +230,7 @@ const Dashboard = ({ billData }: DashboardProps) => {
                     <div className="mt-4 h-2 bg-white/10 rounded-full overflow-hidden">
                       <div 
                         className="h-full bg-gradient-to-r from-teal-500 to-orange-600 rounded-full transition-all duration-1000"
-                        style={{ width: `${data.totalCost ? (serviceCost / data.totalCost) * 100 : 0}%` }}
+                        style={{ width: `${totalCost ? (serviceCost / totalCost) * 100 : 0}%` }}
                       ></div>
                     </div>
                   </div>
@@ -184,7 +251,7 @@ const Dashboard = ({ billData }: DashboardProps) => {
           </h2>
           
           <div className="space-y-4">
-            {(data.recommendations || []).map((rec: string, index: number) => (
+            {recommendations.map((rec: string, index: number) => (
               <div key={index} className="relative group">
                 <div className="absolute inset-0 bg-gradient-to-r from-emerald-500/10 to-green-600/10 rounded-xl blur-sm"></div>
                 <div className="relative backdrop-blur-xl bg-white/5 border border-white/10 rounded-xl p-4 hover:bg-white/10 transition-all duration-300">

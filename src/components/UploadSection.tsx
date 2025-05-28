@@ -3,6 +3,7 @@ import React, { useState, useCallback, useRef } from 'react';
 import { Upload, FileText, CheckCircle, AlertCircle, Sparkles, BarChart3, MessageSquare } from 'lucide-react';
 import { Button } from '../components/ui/button';
 import { supabase } from '../integrations/supabase/client';
+import { useAuth } from './AuthWrapper';
 
 interface UploadSectionProps {
   onDataExtracted: (data: any) => void;
@@ -12,7 +13,9 @@ const UploadSection = ({ onDataExtracted }: UploadSectionProps) => {
   const [isDragging, setIsDragging] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
   const [uploadStatus, setUploadStatus] = useState<'idle' | 'success' | 'error'>('idle');
+  const [errorMessage, setErrorMessage] = useState('');
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const { user } = useAuth();
 
   const handleDragOver = useCallback((e: React.DragEvent) => {
     e.preventDefault();
@@ -44,25 +47,35 @@ const UploadSection = ({ onDataExtracted }: UploadSectionProps) => {
     const pdfFile = files.find(file => file.type === 'application/pdf');
     if (!pdfFile) {
       setUploadStatus('error');
+      setErrorMessage('Please upload a PDF file');
+      return;
+    }
+
+    if (!user) {
+      setUploadStatus('error');
+      setErrorMessage('Please log in to upload files');
       return;
     }
 
     setIsProcessing(true);
     setUploadStatus('idle');
+    setErrorMessage('');
     
     try {
       // Upload file to Supabase Storage
-      const fileName = `${Date.now()}-${pdfFile.name}`;
+      const fileName = `${user.id}/${Date.now()}-${pdfFile.name}`;
       const { data: uploadData, error: uploadError } = await supabase.storage
         .from('aws-invoices')
         .upload(fileName, pdfFile);
 
       if (uploadError) {
-        console.error('Upload error:', uploadError);
-        setUploadStatus('error');
-        setIsProcessing(false);
-        return;
+        throw new Error('Failed to upload file: ' + uploadError.message);
       }
+
+      // Get the public URL for the uploaded file
+      const { data: { publicUrl } } = supabase.storage
+        .from('aws-invoices')
+        .getPublicUrl(fileName);
 
       // Store invoice metadata in database
       const { data: invoiceData, error: dbError } = await supabase
@@ -71,47 +84,42 @@ const UploadSection = ({ onDataExtracted }: UploadSectionProps) => {
           filename: pdfFile.name,
           file_path: uploadData.path,
           file_size: pdfFile.size,
-          processing_status: 'processing'
+          processing_status: 'processing',
+          user_id: user.id
         })
         .select()
         .single();
 
       if (dbError) {
-        console.error('Database error:', dbError);
-        setUploadStatus('error');
-        setIsProcessing(false);
-        return;
+        throw new Error('Failed to save invoice data: ' + dbError.message);
       }
 
-      // Simulate processing delay - in real implementation, this would be actual PDF parsing
-      setTimeout(async () => {
-        // Update invoice with processed data (currently mock data)
-        const processedData = {
-          totalCost: 2847.56,
-          services: ['EC2', 'S3', 'RDS', 'Lambda'],
-          period: 'March 2024'
-        };
+      // Call the edge function to parse the PDF
+      const { data: parseResult, error: parseError } = await supabase.functions
+        .invoke('parse-aws-invoice', {
+          body: {
+            invoiceId: invoiceData.id,
+            fileUrl: publicUrl
+          }
+        });
 
-        await supabase
-          .from('aws_invoices')
-          .update({
-            total_cost: processedData.totalCost,
-            billing_period: processedData.period,
-            services_data: { services: processedData.services },
-            processing_status: 'completed',
-            processed_at: new Date().toISOString()
-          })
-          .eq('id', invoiceData.id);
+      if (parseError) {
+        throw new Error('Failed to process invoice: ' + parseError.message);
+      }
 
-        setIsProcessing(false);
-        setUploadStatus('success');
-        onDataExtracted(processedData);
-      }, 3000);
+      if (parseResult.error) {
+        throw new Error(parseResult.error);
+      }
 
-    } catch (error) {
+      setIsProcessing(false);
+      setUploadStatus('success');
+      onDataExtracted(parseResult.data);
+
+    } catch (error: any) {
       console.error('Error handling file:', error);
       setIsProcessing(false);
       setUploadStatus('error');
+      setErrorMessage(error.message || 'An error occurred while processing the file');
     }
   };
 
@@ -156,7 +164,7 @@ const UploadSection = ({ onDataExtracted }: UploadSectionProps) => {
               </div>
               <div>
                 <h3 className="text-xl font-semibold text-black mb-2">Processing Your Bill</h3>
-                <p className="text-black">AI is analyzing your AWS costs and storing in database...</p>
+                <p className="text-black">AI is analyzing your AWS costs with real data extraction...</p>
                 <div className="mt-4 w-64 h-2 bg-white/10 rounded-full mx-auto overflow-hidden">
                   <div className="h-full bg-gradient-to-r from-teal-500 to-orange-600 rounded-full animate-pulse"></div>
                 </div>
@@ -169,13 +177,13 @@ const UploadSection = ({ onDataExtracted }: UploadSectionProps) => {
                 <CheckCircle className="h-16 w-16 text-emerald-400 mx-auto relative" />
               </div>
               <h3 className="text-2xl font-semibold text-black">Upload Successful!</h3>
-              <p className="text-black">Your AWS bill has been stored in the database and analyzed. Check the dashboard for insights.</p>
+              <p className="text-black">Your AWS bill has been analyzed with real data. Check the dashboard for insights.</p>
             </div>
           ) : uploadStatus === 'error' ? (
             <div className="space-y-4">
               <AlertCircle className="h-16 w-16 text-red-400 mx-auto" />
               <h3 className="text-2xl font-semibold text-black">Upload Failed</h3>
-              <p className="text-black">Please ensure you're uploading a valid PDF file and try again.</p>
+              <p className="text-black">{errorMessage}</p>
             </div>
           ) : (
             <div className="space-y-6">
@@ -189,7 +197,7 @@ const UploadSection = ({ onDataExtracted }: UploadSectionProps) => {
                 <div className="space-y-2 text-sm text-black">
                   <p>• Supports PDF files only</p>
                   <p>• Maximum file size: 10MB</p>
-                  <p>• Your data is securely stored in our database</p>
+                  <p>• Real AI-powered data extraction</p>
                 </div>
               </div>
               <div>
@@ -217,18 +225,18 @@ const UploadSection = ({ onDataExtracted }: UploadSectionProps) => {
         {[
           {
             icon: BarChart3,
-            title: 'Cost Analytics',
-            description: 'Detailed breakdown of your AWS spending with interactive charts'
+            title: 'Real Cost Analytics',
+            description: 'AI extracts actual data from your AWS PDFs with detailed breakdowns'
           },
           {
             icon: MessageSquare,
-            title: 'AI Assistant',
-            description: 'Ask questions about your bill and get intelligent recommendations'
+            title: 'Smart AI Assistant',
+            description: 'Ask questions about your specific bill and get personalized recommendations'
           },
           {
             icon: Sparkles,
-            title: 'Optimization',
-            description: 'AI-powered suggestions to reduce your AWS costs'
+            title: 'AI Optimization',
+            description: 'Get tailored cost-saving suggestions based on your actual usage patterns'
           }
         ].map((feature, index) => (
           <div key={index} className="relative group">
