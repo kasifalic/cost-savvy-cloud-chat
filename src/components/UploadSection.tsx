@@ -13,7 +13,7 @@ const UploadSection = ({ onDataExtracted }: UploadSectionProps) => {
   const [isProcessing, setIsProcessing] = useState(false);
   const [uploadStatus, setUploadStatus] = useState<'idle' | 'success' | 'error'>('idle');
   const [errorMessage, setErrorMessage] = useState('');
-  const [processingMethod, setProcessingMethod] = useState<'text' | 'vision'>('vision');
+  const [processingMethod, setProcessingMethod] = useState<'text' | 'vision'>('text');
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Helper function to convert file to base64 safely
@@ -77,7 +77,7 @@ const UploadSection = ({ onDataExtracted }: UploadSectionProps) => {
     if (file.size > maxSize) {
       console.log('File too large:', file.size);
       setUploadStatus('error');
-      setErrorMessage('File size must be less than 15MB for GPT-4 Vision processing');
+      setErrorMessage('File size must be less than 15MB for processing');
       return;
     }
 
@@ -152,7 +152,7 @@ const UploadSection = ({ onDataExtracted }: UploadSectionProps) => {
           Analyze Your AWS Bill
         </h1>
         <p className="text-xl text-black max-w-2xl mx-auto leading-relaxed">
-          Upload your AWS billing PDF and get AI-powered insights with GPT-4 Vision for accurate cost analysis
+          Upload your AWS billing PDF and get AI-powered insights with advanced text extraction
         </p>
       </div>
 
@@ -166,22 +166,6 @@ const UploadSection = ({ onDataExtracted }: UploadSectionProps) => {
           </h3>
           <div className="flex gap-4">
             <button
-              onClick={() => setProcessingMethod('vision')}
-              className={`flex-1 p-4 rounded-xl border transition-all duration-200 ${
-                processingMethod === 'vision'
-                  ? 'bg-gradient-to-r from-teal-500/20 to-orange-600/20 border-teal-500/50 text-teal-400'
-                  : 'bg-white/5 border-white/20 text-black hover:bg-white/10'
-              }`}
-            >
-              <div className="flex items-center gap-3">
-                <Eye className="h-5 w-5" />
-                <div className="text-left">
-                  <div className="font-semibold">GPT-4 Vision (Recommended)</div>
-                  <div className="text-sm opacity-70">AI analyzes PDF as images for maximum accuracy</div>
-                </div>
-              </div>
-            </button>
-            <button
               onClick={() => setProcessingMethod('text')}
               className={`flex-1 p-4 rounded-xl border transition-all duration-200 ${
                 processingMethod === 'text'
@@ -192,12 +176,35 @@ const UploadSection = ({ onDataExtracted }: UploadSectionProps) => {
               <div className="flex items-center gap-3">
                 <FileText className="h-5 w-5" />
                 <div className="text-left">
-                  <div className="font-semibold">Text Extraction</div>
-                  <div className="text-sm opacity-70">Extract text directly from PDF</div>
+                  <div className="font-semibold">Text Extraction (Recommended)</div>
+                  <div className="text-sm opacity-70">Extract text directly from PDF for analysis</div>
+                </div>
+              </div>
+            </button>
+            <button
+              onClick={() => setProcessingMethod('vision')}
+              className={`flex-1 p-4 rounded-xl border transition-all duration-200 ${
+                processingMethod === 'vision'
+                  ? 'bg-gradient-to-r from-teal-500/20 to-orange-600/20 border-teal-500/50 text-teal-400'
+                  : 'bg-white/5 border-white/20 text-black hover:bg-white/10'
+              }`}
+            >
+              <div className="flex items-center gap-3">
+                <Eye className="h-5 w-5" />
+                <div className="text-left">
+                  <div className="font-semibold">GPT-4 Vision (Limited)</div>
+                  <div className="text-sm opacity-70">Note: Vision API requires image files, not PDFs</div>
                 </div>
               </div>
             </button>
           </div>
+          {processingMethod === 'vision' && (
+            <div className="mt-4 p-3 bg-orange-100/10 border border-orange-200/20 rounded-lg">
+              <p className="text-sm text-orange-600">
+                <strong>Note:</strong> GPT-4 Vision can only process image files (PNG, JPG). For PDF analysis, use Text Extraction method.
+              </p>
+            </div>
+          )}
         </div>
       </div>
 
@@ -228,11 +235,11 @@ const UploadSection = ({ onDataExtracted }: UploadSectionProps) => {
               </div>
               <div>
                 <h3 className="text-xl font-semibold text-black mb-2">
-                  {processingMethod === 'vision' ? 'GPT-4 Vision Processing...' : 'AI Processing Your Bill...'}
+                  {processingMethod === 'vision' ? 'Processing with Vision API...' : 'AI Processing Your Bill...'}
                 </h3>
                 <p className="text-black">
                   {processingMethod === 'vision' 
-                    ? 'Converting PDF to images and analyzing with AI vision...'
+                    ? 'Note: Vision API has limitations with PDF files...'
                     : 'Extracting text and analyzing with AI...'
                   }
                 </p>
@@ -249,7 +256,7 @@ const UploadSection = ({ onDataExtracted }: UploadSectionProps) => {
               </div>
               <h3 className="text-2xl font-semibold text-black">Upload Successful!</h3>
               <p className="text-black">
-                Your AWS bill has been analyzed with {processingMethod === 'vision' ? 'GPT-4 Vision' : 'AI text extraction'}. 
+                Your AWS bill has been analyzed with {processingMethod === 'vision' ? 'Vision API' : 'AI text extraction'}. 
                 Check the dashboard for insights.
               </p>
             </div>
@@ -276,8 +283,8 @@ const UploadSection = ({ onDataExtracted }: UploadSectionProps) => {
                 <p className="text-black mb-6">or click to browse files</p>
                 <div className="space-y-2 text-sm text-black">
                   <p>• Supports PDF files only</p>
-                  <p>• Maximum file size: {processingMethod === 'vision' ? '15MB' : '10MB'}</p>
-                  <p>• {processingMethod === 'vision' ? 'GPT-4 Vision' : 'AI text'} powered analysis</p>
+                  <p>• Maximum file size: 15MB</p>
+                  <p>• {processingMethod === 'vision' ? 'Vision API (limited PDF support)' : 'AI text'} powered analysis</p>
                 </div>
               </div>
               <div>
@@ -304,9 +311,9 @@ const UploadSection = ({ onDataExtracted }: UploadSectionProps) => {
       <div className="grid md:grid-cols-3 gap-6 mt-16">
         {[
           {
-            icon: Eye,
-            title: 'GPT-4 Vision Analysis',
-            description: 'AI visually analyzes your AWS PDFs with advanced computer vision for maximum accuracy'
+            icon: FileText,
+            title: 'Smart Text Analysis',
+            description: 'AI extracts and analyzes text from your AWS PDFs with high accuracy'
           },
           {
             icon: BarChart3,
