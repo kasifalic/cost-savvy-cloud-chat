@@ -21,8 +21,8 @@ const Header = ({ activeTab, setActiveTab }: HeaderProps) => {
         <div className="flex items-center justify-between h-20">
           <div className="flex items-center space-x-3">
             <div className="relative">
-              <div className="absolute inset-0 bg-gradient-to-r from-blue-500 to-purple-600 rounded-xl blur-lg opacity-50"></div>
-              <div className="relative bg-gradient-to-r from-blue-500 to-purple-600 p-3 rounded-xl">
+              <div className="absolute inset-0 bg-gradient-to-r from-teal-500 to-orange-600 rounded-xl blur-lg opacity-50"></div>
+              <div className="relative bg-gradient-to-r from-teal-500 to-orange-600 p-3 rounded-xl">
                 <Cloud className="h-6 w-6 text-white" />
               </div>
             </div>
@@ -47,12 +47,12 @@ const Header = ({ activeTab, setActiveTab }: HeaderProps) => {
                     onClick={() => setActiveTab(item.id as any)}
                     className={`relative flex items-center space-x-2 px-6 py-3 rounded-xl text-sm font-medium transition-all duration-300 ${
                       activeTab === item.id
-                        ? 'text-white bg-gradient-to-r from-blue-500/20 to-purple-600/20 shadow-lg border border-white/20'
+                        ? 'text-white bg-gradient-to-r from-teal-500/20 to-orange-600/20 shadow-lg border border-white/20'
                         : 'text-gray-300 hover:text-white hover:bg-white/5'
                     }`}
                   >
                     {activeTab === item.id && (
-                      <div className="absolute inset-0 bg-gradient-to-r from-blue-500/10 to-purple-600/10 rounded-xl blur-xl"></div>
+                      <div className="absolute inset-0 bg-gradient-to-r from-teal-500/10 to-orange-600/10 rounded-xl blur-xl"></div>
                     )}
                     <Icon className="h-4 w-4 relative z-10" />
                     <span className="relative z-10">{item.label}</span>

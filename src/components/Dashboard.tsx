@@ -29,7 +29,7 @@ const Dashboard = ({ billData }: DashboardProps) => {
     <div className="max-w-7xl mx-auto space-y-8">
       {/* Header */}
       <div className="text-center mb-12">
-        <h1 className="text-4xl font-bold mb-4 bg-gradient-to-r from-white via-blue-100 to-purple-200 bg-clip-text text-transparent">
+        <h1 className="text-4xl font-bold mb-4 bg-gradient-to-r from-white via-teal-100 to-orange-200 bg-clip-text text-transparent">
           Cost Analysis Dashboard
         </h1>
         <p className="text-gray-300">AI-powered insights into your AWS spending</p>
@@ -38,11 +38,11 @@ const Dashboard = ({ billData }: DashboardProps) => {
       {/* Key Metrics */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
         <div className="relative group">
-          <div className="absolute inset-0 bg-gradient-to-r from-green-500/10 to-emerald-600/10 rounded-2xl blur-xl"></div>
+          <div className="absolute inset-0 bg-gradient-to-r from-emerald-500/10 to-green-600/10 rounded-2xl blur-xl"></div>
           <div className="relative backdrop-blur-xl bg-white/5 border border-white/10 rounded-2xl p-6 hover:bg-white/10 transition-all duration-300">
             <div className="flex items-center justify-between mb-4">
-              <DollarSign className="h-8 w-8 text-green-400" />
-              <span className="text-xs bg-green-500/20 text-green-300 px-2 py-1 rounded-full">
+              <DollarSign className="h-8 w-8 text-emerald-400" />
+              <span className="text-xs bg-emerald-500/20 text-emerald-300 px-2 py-1 rounded-full">
                 Current
               </span>
             </div>
@@ -54,17 +54,17 @@ const Dashboard = ({ billData }: DashboardProps) => {
         </div>
 
         <div className="relative group">
-          <div className="absolute inset-0 bg-gradient-to-r from-blue-500/10 to-cyan-600/10 rounded-2xl blur-xl"></div>
+          <div className="absolute inset-0 bg-gradient-to-r from-teal-500/10 to-cyan-600/10 rounded-2xl blur-xl"></div>
           <div className="relative backdrop-blur-xl bg-white/5 border border-white/10 rounded-2xl p-6 hover:bg-white/10 transition-all duration-300">
             <div className="flex items-center justify-between mb-4">
               {data.costChange < 0 ? (
-                <TrendingDown className="h-8 w-8 text-green-400" />
+                <TrendingDown className="h-8 w-8 text-emerald-400" />
               ) : (
                 <TrendingUp className="h-8 w-8 text-red-400" />
               )}
               <span className={`text-xs px-2 py-1 rounded-full ${
                 data.costChange < 0 
-                  ? 'bg-green-500/20 text-green-300' 
+                  ? 'bg-emerald-500/20 text-emerald-300' 
                   : 'bg-red-500/20 text-red-300'
               }`}>
                 {data.costChange > 0 ? '+' : ''}{data.costChange}%
@@ -78,11 +78,11 @@ const Dashboard = ({ billData }: DashboardProps) => {
         </div>
 
         <div className="relative group">
-          <div className="absolute inset-0 bg-gradient-to-r from-purple-500/10 to-pink-600/10 rounded-2xl blur-xl"></div>
+          <div className="absolute inset-0 bg-gradient-to-r from-orange-500/10 to-coral-600/10 rounded-2xl blur-xl"></div>
           <div className="relative backdrop-blur-xl bg-white/5 border border-white/10 rounded-2xl p-6 hover:bg-white/10 transition-all duration-300">
             <div className="flex items-center justify-between mb-4">
-              <Server className="h-8 w-8 text-purple-400" />
-              <span className="text-xs bg-purple-500/20 text-purple-300 px-2 py-1 rounded-full">
+              <Server className="h-8 w-8 text-orange-400" />
+              <span className="text-xs bg-orange-500/20 text-orange-300 px-2 py-1 rounded-full">
                 Active
               </span>
             </div>
@@ -94,11 +94,11 @@ const Dashboard = ({ billData }: DashboardProps) => {
         </div>
 
         <div className="relative group">
-          <div className="absolute inset-0 bg-gradient-to-r from-orange-500/10 to-yellow-600/10 rounded-2xl blur-xl"></div>
+          <div className="absolute inset-0 bg-gradient-to-r from-amber-500/10 to-yellow-600/10 rounded-2xl blur-xl"></div>
           <div className="relative backdrop-blur-xl bg-white/5 border border-white/10 rounded-2xl p-6 hover:bg-white/10 transition-all duration-300">
             <div className="flex items-center justify-between mb-4">
-              <Cloud className="h-8 w-8 text-orange-400" />
-              <span className="text-xs bg-orange-500/20 text-orange-300 px-2 py-1 rounded-full">
+              <Cloud className="h-8 w-8 text-amber-400" />
+              <span className="text-xs bg-amber-500/20 text-amber-300 px-2 py-1 rounded-full">
                 Potential
               </span>
             </div>
@@ -112,10 +112,10 @@ const Dashboard = ({ billData }: DashboardProps) => {
 
       {/* Service Breakdown */}
       <div className="relative">
-        <div className="absolute inset-0 bg-gradient-to-r from-blue-500/5 to-purple-600/5 rounded-3xl blur-2xl"></div>
+        <div className="absolute inset-0 bg-gradient-to-r from-teal-500/5 to-orange-600/5 rounded-3xl blur-2xl"></div>
         <div className="relative backdrop-blur-xl bg-white/5 border border-white/10 rounded-3xl p-8">
           <h2 className="text-2xl font-bold text-white mb-6 flex items-center gap-3">
-            <Server className="h-6 w-6 text-blue-400" />
+            <Server className="h-6 w-6 text-teal-400" />
             Service Cost Breakdown
           </h2>
           
@@ -128,8 +128,8 @@ const Dashboard = ({ billData }: DashboardProps) => {
                   <div className="relative backdrop-blur-xl bg-white/5 border border-white/10 rounded-xl p-6 hover:bg-white/10 transition-all duration-300">
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-4">
-                        <div className="p-3 bg-gradient-to-r from-blue-500/20 to-purple-600/20 rounded-xl">
-                          <Icon className="h-6 w-6 text-blue-400" />
+                        <div className="p-3 bg-gradient-to-r from-teal-500/20 to-orange-600/20 rounded-xl">
+                          <Icon className="h-6 w-6 text-teal-400" />
                         </div>
                         <div>
                           <h3 className="text-lg font-semibold text-white">{service.name}</h3>
@@ -142,7 +142,7 @@ const Dashboard = ({ billData }: DashboardProps) => {
                           ${service.cost.toLocaleString()}
                         </div>
                         <div className={`flex items-center gap-1 ${
-                          service.change > 0 ? 'text-red-400' : 'text-green-400'
+                          service.change > 0 ? 'text-red-400' : 'text-emerald-400'
                         }`}>
                           {service.change > 0 ? (
                             <TrendingUp className="h-4 w-4" />
@@ -159,7 +159,7 @@ const Dashboard = ({ billData }: DashboardProps) => {
                     {/* Progress bar */}
                     <div className="mt-4 h-2 bg-white/10 rounded-full overflow-hidden">
                       <div 
-                        className="h-full bg-gradient-to-r from-blue-500 to-purple-600 rounded-full transition-all duration-1000"
+                        className="h-full bg-gradient-to-r from-teal-500 to-orange-600 rounded-full transition-all duration-1000"
                         style={{ width: `${(service.cost / data.totalCost) * 100}%` }}
                       ></div>
                     </div>
