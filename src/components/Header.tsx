@@ -1,6 +1,6 @@
 
-import React from 'react';
-import { Cloud, BarChart3, MessageSquare, Settings, Sparkles } from 'lucide-react';
+import React, { useState } from 'react';
+import { Cloud, BarChart3, MessageSquare, Settings, Sparkles, Menu, X } from 'lucide-react';
 
 interface HeaderProps {
   activeTab: 'upload' | 'dashboard' | 'chat' | 'settings';
@@ -8,12 +8,19 @@ interface HeaderProps {
 }
 
 const Header = ({ activeTab, setActiveTab }: HeaderProps) => {
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+
   const navItems = [
     { id: 'upload', label: 'Upload', icon: Cloud },
     { id: 'dashboard', label: 'Dashboard', icon: BarChart3 },
     { id: 'chat', label: 'AI Assistant', icon: MessageSquare },
     { id: 'settings', label: 'Settings', icon: Settings },
   ];
+
+  const handleTabClick = (tabId: string) => {
+    setActiveTab(tabId as any);
+    setIsMobileMenuOpen(false);
+  };
 
   return (
     <header className="border-b border-white/10 backdrop-blur-xl bg-white/5 sticky top-0 z-50">
@@ -37,6 +44,7 @@ const Header = ({ activeTab, setActiveTab }: HeaderProps) => {
             </div>
           </div>
           
+          {/* Desktop Navigation */}
           <nav className="hidden md:flex">
             <div className="flex bg-white/5 backdrop-blur-xl rounded-2xl p-1 border border-white/10">
               {navItems.map((item) => {
@@ -62,12 +70,47 @@ const Header = ({ activeTab, setActiveTab }: HeaderProps) => {
             </div>
           </nav>
           
+          {/* Mobile Menu Button */}
           <div className="md:hidden">
-            <button className="text-gray-300 hover:text-white p-2 rounded-xl bg-white/5 backdrop-blur-xl border border-white/10">
-              <Settings className="h-5 w-5" />
+            <button 
+              onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
+              className="text-gray-300 hover:text-white p-2 rounded-xl bg-white/5 backdrop-blur-xl border border-white/10 transition-all duration-300"
+            >
+              {isMobileMenuOpen ? (
+                <X className="h-5 w-5" />
+              ) : (
+                <Menu className="h-5 w-5" />
+              )}
             </button>
           </div>
         </div>
+
+        {/* Mobile Navigation Menu */}
+        {isMobileMenuOpen && (
+          <div className="md:hidden absolute top-full left-0 right-0 bg-white/5 backdrop-blur-xl border-b border-white/10">
+            <div className="container mx-auto px-4 py-4">
+              <div className="space-y-2">
+                {navItems.map((item) => {
+                  const Icon = item.icon;
+                  return (
+                    <button
+                      key={item.id}
+                      onClick={() => handleTabClick(item.id)}
+                      className={`w-full flex items-center space-x-3 px-4 py-3 rounded-xl text-sm font-medium transition-all duration-300 ${
+                        activeTab === item.id
+                          ? 'text-white bg-gradient-to-r from-teal-500/20 to-orange-600/20 border border-white/20'
+                          : 'text-gray-300 hover:text-white hover:bg-white/5'
+                      }`}
+                    >
+                      <Icon className="h-5 w-5" />
+                      <span>{item.label}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </header>
   );
