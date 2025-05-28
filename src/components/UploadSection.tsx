@@ -1,6 +1,6 @@
 
 import React, { useState, useCallback, useRef } from 'react';
-import { Upload, FileText, CheckCircle, AlertCircle, Sparkles, BarChart3, MessageSquare, Eye } from 'lucide-react';
+import { Upload, FileText, CheckCircle, AlertCircle, Sparkles, BarChart3, MessageSquare, Eye, X } from 'lucide-react';
 import { Button } from '../components/ui/button';
 import { supabase } from '../integrations/supabase/client';
 
@@ -14,6 +14,7 @@ const UploadSection = ({ onDataExtracted }: UploadSectionProps) => {
   const [uploadStatus, setUploadStatus] = useState<'idle' | 'success' | 'error'>('idle');
   const [errorMessage, setErrorMessage] = useState('');
   const [processingMethod, setProcessingMethod] = useState<'text' | 'vision'>('text');
+  const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Helper function to convert file to base64 safely
@@ -46,96 +47,164 @@ const UploadSection = ({ onDataExtracted }: UploadSectionProps) => {
     setIsDragging(false);
     const files = Array.from(e.dataTransfer.files);
     if (files.length > 0) {
-      processFile(files[0]);
+      handleFileSelection(files);
     }
   }, []);
 
   const handleFileInput = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
     if (files && files.length > 0) {
-      processFile(files[0]);
+      handleFileSelection(Array.from(files));
     }
+  };
+
+  const handleFileSelection = (files: File[]) => {
+    // Filter files based on processing method
+    let validFiles: File[] = [];
+    let invalidFiles: string[] = [];
+
+    files.forEach(file => {
+      if (processingMethod === 'vision') {
+        // For vision, accept JPG and PNG images
+        if (file.type === 'image/jpeg' || file.type === 'image/jpg' || file.type === 'image/png') {
+          validFiles.push(file);
+        } else {
+          invalidFiles.push(`${file.name} (${file.type})`);
+        }
+      } else {
+        // For text extraction, accept only PDF
+        if (file.type === 'application/pdf') {
+          validFiles.push(file);
+        } else {
+          invalidFiles.push(`${file.name} (${file.type})`);
+        }
+      }
+    });
+
+    if (invalidFiles.length > 0) {
+      const expectedTypes = processingMethod === 'vision' ? 'JPG, PNG images' : 'PDF files';
+      setUploadStatus('error');
+      setErrorMessage(`Invalid file types: ${invalidFiles.join(', ')}. Please upload ${expectedTypes} only.`);
+      return;
+    }
+
+    // Validate file sizes
+    const maxSize = 15 * 1024 * 1024; // 15MB
+    const oversizedFiles = validFiles.filter(file => file.size > maxSize);
+    if (oversizedFiles.length > 0) {
+      setUploadStatus('error');
+      setErrorMessage(`Files too large: ${oversizedFiles.map(f => f.name).join(', ')}. Maximum size is 15MB per file.`);
+      return;
+    }
+
+    setSelectedFiles(validFiles);
+    setUploadStatus('idle');
+    setErrorMessage('');
+  };
+
+  const removeFile = (index: number) => {
+    setSelectedFiles(prev => prev.filter((_, i) => i !== index));
   };
 
   const handleButtonClick = () => {
     fileInputRef.current?.click();
   };
 
-  const processFile = async (file: File) => {
-    console.log('Processing file:', file.name, 'Size:', file.size, 'Type:', file.type);
+  const processFiles = async () => {
+    if (selectedFiles.length === 0) {
+      setUploadStatus('error');
+      setErrorMessage('Please select files to process');
+      return;
+    }
+
+    console.log('Processing files:', selectedFiles.map(f => f.name));
     
-    // Validate file type
-    if (file.type !== 'application/pdf') {
-      console.log('Invalid file type:', file.type);
-      setUploadStatus('error');
-      setErrorMessage('Please upload a PDF file');
-      return;
-    }
-
-    // Validate file size (15MB limit for Vision processing)
-    const maxSize = 15 * 1024 * 1024; // 15MB
-    if (file.size > maxSize) {
-      console.log('File too large:', file.size);
-      setUploadStatus('error');
-      setErrorMessage('File size must be less than 15MB for processing');
-      return;
-    }
-
-    // Set processing state
     setIsProcessing(true);
     setUploadStatus('idle');
     setErrorMessage('');
     
     try {
-      console.log('Converting file to base64 using FileReader...');
-      
-      // Convert file to base64 using FileReader (safe for large files)
-      const base64String = await fileToBase64(file);
-      
-      console.log('File converted to base64, length:', base64String.length);
-      console.log(`Calling Supabase function with ${processingMethod} method...`);
+      let allResults: any[] = [];
 
-      // Choose function based on processing method
-      const functionName = processingMethod === 'vision' ? 'parse-aws-invoice-vision' : 'parse-aws-invoice';
+      for (let i = 0; i < selectedFiles.length; i++) {
+        const file = selectedFiles[i];
+        console.log(`Processing file ${i + 1}/${selectedFiles.length}:`, file.name);
+        
+        const base64String = await fileToBase64(file);
+        console.log(`File converted to base64, length:`, base64String.length);
 
-      // Call the parse function
-      const { data: result, error } = await supabase.functions.invoke(functionName, {
-        body: {
-          fileData: base64String,
-          fileName: file.name
+        // Choose function based on processing method
+        const functionName = processingMethod === 'vision' ? 'parse-aws-invoice-vision' : 'parse-aws-invoice';
+
+        const { data: result, error } = await supabase.functions.invoke(functionName, {
+          body: {
+            fileData: base64String,
+            fileName: file.name
+          }
+        });
+
+        console.log(`File ${i + 1} processing result:`, { result, error });
+
+        if (error) {
+          console.error('Supabase function error:', error);
+          throw new Error(`Failed to process ${file.name}: ${error.message}`);
         }
-      });
 
-      console.log('Supabase function response:', { result, error });
+        if (result?.error) {
+          console.error('Function returned error:', result.error);
+          throw new Error(`Error processing ${file.name}: ${result.error}`);
+        }
 
-      if (error) {
-        console.error('Supabase function error:', error);
-        throw new Error(`Failed to process invoice: ${error.message}`);
+        if (!result?.success || !result?.data) {
+          console.error('Invalid response format:', result);
+          throw new Error(`Invalid response from processing ${file.name}`);
+        }
+
+        allResults.push({
+          fileName: file.name,
+          data: result.data,
+          extractionId: result.extractionId,
+          method: result.method
+        });
       }
 
-      if (result?.error) {
-        console.error('Function returned error:', result.error);
-        throw new Error(result.error);
-      }
-
-      if (!result?.success || !result?.data) {
-        console.error('Invalid response format:', result);
-        throw new Error('Invalid response from processing function');
-      }
-
-      console.log('Processing successful, extracted data:', result.data);
+      console.log('All files processed successfully:', allResults);
       
-      // Success
+      // If multiple files, combine the results
+      let combinedData;
+      if (allResults.length === 1) {
+        combinedData = allResults[0].data;
+      } else {
+        // Combine multiple results
+        combinedData = {
+          totalCost: allResults.reduce((sum, r) => sum + (r.data.totalCost || 0), 0),
+          costChange: allResults.reduce((sum, r) => sum + (r.data.costChange || 0), 0),
+          billingPeriod: allResults[0].data.billingPeriod,
+          services: allResults.flatMap(r => r.data.services || []),
+          recommendations: allResults.flatMap(r => r.data.recommendations || []),
+          multipleFiles: allResults.map(r => ({ fileName: r.fileName, data: r.data }))
+        };
+      }
+
       setIsProcessing(false);
       setUploadStatus('success');
-      onDataExtracted(result.data);
+      setSelectedFiles([]);
+      onDataExtracted(combinedData);
 
     } catch (error: any) {
       console.error('Error during file processing:', error);
       setIsProcessing(false);
       setUploadStatus('error');
-      setErrorMessage(error.message || 'An error occurred while processing the file');
+      setErrorMessage(error.message || 'An error occurred while processing the files');
     }
+  };
+
+  const getAcceptedTypes = () => {
+    return processingMethod === 'vision' ? '.jpg,.jpeg,.png' : '.pdf';
+  };
+
+  const getFileTypeDescription = () => {
+    return processingMethod === 'vision' ? 'JPG, PNG images' : 'PDF files';
   };
 
   return (
@@ -152,7 +221,7 @@ const UploadSection = ({ onDataExtracted }: UploadSectionProps) => {
           Analyze Your AWS Bill
         </h1>
         <p className="text-xl text-black max-w-2xl mx-auto leading-relaxed">
-          Upload your AWS billing PDF and get AI-powered insights with advanced text extraction
+          Upload your AWS billing documents and get AI-powered insights with advanced analysis
         </p>
       </div>
 
@@ -166,7 +235,10 @@ const UploadSection = ({ onDataExtracted }: UploadSectionProps) => {
           </h3>
           <div className="flex gap-4">
             <button
-              onClick={() => setProcessingMethod('text')}
+              onClick={() => {
+                setProcessingMethod('text');
+                setSelectedFiles([]);
+              }}
               className={`flex-1 p-4 rounded-xl border transition-all duration-200 ${
                 processingMethod === 'text'
                   ? 'bg-gradient-to-r from-teal-500/20 to-orange-600/20 border-teal-500/50 text-teal-400'
@@ -177,12 +249,15 @@ const UploadSection = ({ onDataExtracted }: UploadSectionProps) => {
                 <FileText className="h-5 w-5" />
                 <div className="text-left">
                   <div className="font-semibold">Text Extraction (Recommended)</div>
-                  <div className="text-sm opacity-70">Extract text directly from PDF for analysis</div>
+                  <div className="text-sm opacity-70">Extract text directly from PDF files</div>
                 </div>
               </div>
             </button>
             <button
-              onClick={() => setProcessingMethod('vision')}
+              onClick={() => {
+                setProcessingMethod('vision');
+                setSelectedFiles([]);
+              }}
               className={`flex-1 p-4 rounded-xl border transition-all duration-200 ${
                 processingMethod === 'vision'
                   ? 'bg-gradient-to-r from-teal-500/20 to-orange-600/20 border-teal-500/50 text-teal-400'
@@ -192,21 +267,62 @@ const UploadSection = ({ onDataExtracted }: UploadSectionProps) => {
               <div className="flex items-center gap-3">
                 <Eye className="h-5 w-5" />
                 <div className="text-left">
-                  <div className="font-semibold">GPT-4 Vision (Limited)</div>
-                  <div className="text-sm opacity-70">Note: Vision API requires image files, not PDFs</div>
+                  <div className="font-semibold">GPT-4 Vision</div>
+                  <div className="text-sm opacity-70">Analyze JPG/PNG images with Vision AI</div>
                 </div>
               </div>
             </button>
           </div>
-          {processingMethod === 'vision' && (
-            <div className="mt-4 p-3 bg-orange-100/10 border border-orange-200/20 rounded-lg">
-              <p className="text-sm text-orange-600">
-                <strong>Note:</strong> GPT-4 Vision can only process image files (PNG, JPG). For PDF analysis, use Text Extraction method.
-              </p>
-            </div>
-          )}
+          <div className="mt-4 p-3 bg-blue-100/10 border border-blue-200/20 rounded-lg">
+            <p className="text-sm text-blue-600">
+              <strong>Current method:</strong> {processingMethod === 'vision' ? 'GPT-4 Vision requires JPG/PNG image files' : 'Text Extraction requires PDF files'}
+              {processingMethod === 'vision' && ' - You can upload multiple images'}
+            </p>
+          </div>
         </div>
       </div>
+
+      {/* Selected Files Display */}
+      {selectedFiles.length > 0 && (
+        <div className="relative mb-6">
+          <div className="absolute inset-0 bg-gradient-to-r from-teal-500/5 to-orange-600/5 rounded-2xl blur-xl"></div>
+          <div className="relative backdrop-blur-xl bg-white/5 border border-white/10 rounded-2xl p-4">
+            <h4 className="text-lg font-semibold text-black mb-3">Selected Files ({selectedFiles.length})</h4>
+            <div className="space-y-2 max-h-32 overflow-y-auto">
+              {selectedFiles.map((file, index) => (
+                <div key={index} className="flex items-center justify-between bg-white/10 rounded-lg p-3">
+                  <div className="flex items-center gap-3">
+                    <FileText className="h-4 w-4 text-teal-400" />
+                    <span className="text-sm text-black">{file.name}</span>
+                    <span className="text-xs text-gray-500">({(file.size / 1024 / 1024).toFixed(2)} MB)</span>
+                  </div>
+                  <button
+                    onClick={() => removeFile(index)}
+                    className="text-red-400 hover:text-red-300 transition-colors"
+                  >
+                    <X className="h-4 w-4" />
+                  </button>
+                </div>
+              ))}
+            </div>
+            <div className="mt-4 flex gap-3">
+              <Button 
+                onClick={processFiles}
+                className="bg-gradient-to-r from-teal-500 to-orange-600 hover:from-teal-600 hover:to-orange-700 text-white"
+              >
+                Process {selectedFiles.length} File{selectedFiles.length > 1 ? 's' : ''}
+              </Button>
+              <Button 
+                onClick={() => setSelectedFiles([])}
+                variant="outline"
+                className="border-white/20 text-black hover:bg-white/10"
+              >
+                Clear All
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Upload Area */}
       <div className="relative">
@@ -235,11 +351,11 @@ const UploadSection = ({ onDataExtracted }: UploadSectionProps) => {
               </div>
               <div>
                 <h3 className="text-xl font-semibold text-black mb-2">
-                  {processingMethod === 'vision' ? 'Processing with Vision API...' : 'AI Processing Your Bill...'}
+                  {processingMethod === 'vision' ? 'Processing with Vision API...' : 'AI Processing Your Files...'}
                 </h3>
                 <p className="text-black">
                   {processingMethod === 'vision' 
-                    ? 'Note: Vision API has limitations with PDF files...'
+                    ? 'Analyzing images with GPT-4 Vision...'
                     : 'Extracting text and analyzing with AI...'
                   }
                 </p>
@@ -254,9 +370,9 @@ const UploadSection = ({ onDataExtracted }: UploadSectionProps) => {
                 <div className="absolute inset-0 bg-emerald-500 rounded-full blur-lg opacity-50"></div>
                 <CheckCircle className="h-16 w-16 text-emerald-400 mx-auto relative" />
               </div>
-              <h3 className="text-2xl font-semibold text-black">Upload Successful!</h3>
+              <h3 className="text-2xl font-semibold text-black">Processing Complete!</h3>
               <p className="text-black">
-                Your AWS bill has been analyzed with {processingMethod === 'vision' ? 'Vision API' : 'AI text extraction'}. 
+                Your files have been analyzed with {processingMethod === 'vision' ? 'Vision API' : 'AI text extraction'}. 
                 Check the dashboard for insights.
               </p>
             </div>
@@ -279,19 +395,23 @@ const UploadSection = ({ onDataExtracted }: UploadSectionProps) => {
                 <Upload className="h-16 w-16 text-teal-400 mx-auto relative" />
               </div>
               <div>
-                <h3 className="text-2xl font-semibold text-black mb-2">Drop your AWS bill here</h3>
+                <h3 className="text-2xl font-semibold text-black mb-2">
+                  Drop your {getFileTypeDescription()} here
+                </h3>
                 <p className="text-black mb-6">or click to browse files</p>
                 <div className="space-y-2 text-sm text-black">
-                  <p>• Supports PDF files only</p>
-                  <p>• Maximum file size: 15MB</p>
-                  <p>• {processingMethod === 'vision' ? 'Vision API (limited PDF support)' : 'AI text'} powered analysis</p>
+                  <p>• Supports {getFileTypeDescription()}</p>
+                  <p>• Maximum file size: 15MB per file</p>
+                  <p>• {processingMethod === 'vision' ? 'Multiple images supported' : 'Single or multiple files'}</p>
+                  <p>• {processingMethod === 'vision' ? 'Vision AI' : 'AI text'} powered analysis</p>
                 </div>
               </div>
               <div>
                 <input
                   ref={fileInputRef}
                   type="file"
-                  accept=".pdf"
+                  accept={getAcceptedTypes()}
+                  multiple={processingMethod === 'vision'}
                   onChange={handleFileInput}
                   className="hidden"
                 />
@@ -299,7 +419,7 @@ const UploadSection = ({ onDataExtracted }: UploadSectionProps) => {
                   onClick={handleButtonClick}
                   className="relative bg-gradient-to-r from-teal-500 to-orange-600 hover:from-teal-600 hover:to-orange-700 text-white px-8 py-4 text-lg font-medium border-0 shadow-xl shadow-teal-500/25 hover:shadow-teal-500/40 transition-all duration-300"
                 >
-                  Choose File
+                  Choose {processingMethod === 'vision' ? 'Images' : 'Files'}
                 </Button>
               </div>
             </div>
@@ -311,9 +431,11 @@ const UploadSection = ({ onDataExtracted }: UploadSectionProps) => {
       <div className="grid md:grid-cols-3 gap-6 mt-16">
         {[
           {
-            icon: FileText,
-            title: 'Smart Text Analysis',
-            description: 'AI extracts and analyzes text from your AWS PDFs with high accuracy'
+            icon: processingMethod === 'vision' ? Eye : FileText,
+            title: processingMethod === 'vision' ? 'Vision AI Analysis' : 'Smart Text Analysis',
+            description: processingMethod === 'vision' 
+              ? 'AI analyzes your bill images with GPT-4 Vision for accurate data extraction'
+              : 'AI extracts and analyzes text from your AWS PDFs with high accuracy'
           },
           {
             icon: BarChart3,
