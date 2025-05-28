@@ -29,65 +29,77 @@ const UploadSection = ({ onDataExtracted }: UploadSectionProps) => {
     e.preventDefault();
     setIsDragging(false);
     const files = Array.from(e.dataTransfer.files);
-    processFiles(files);
+    handleFileProcessing(files);
   }, []);
 
   const handleFileInput = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(e.target.files || []);
-    processFiles(files);
+    handleFileProcessing(files);
   };
 
   const handleButtonClick = () => {
     fileInputRef.current?.click();
   };
 
-  const processFiles = async (files: File[]) => {
+  const handleFileProcessing = async (files: File[]) => {
+    console.log('Starting file processing with files:', files.map(f => f.name));
+    
+    // Find PDF file
     const pdfFile = files.find(file => file.type === 'application/pdf');
     if (!pdfFile) {
+      console.log('No PDF file found');
       setUploadStatus('error');
       setErrorMessage('Please upload a PDF file');
       return;
     }
 
+    console.log('Found PDF file:', pdfFile.name, 'Size:', pdfFile.size);
+
+    // Set processing state
     setIsProcessing(true);
     setUploadStatus('idle');
     setErrorMessage('');
     
     try {
-      console.log('Processing file:', pdfFile.name);
+      console.log('Converting file to base64...');
       
-      // Convert PDF to base64 for processing
-      const fileBuffer = await pdfFile.arrayBuffer();
-      const base64 = btoa(String.fromCharCode(...new Uint8Array(fileBuffer)));
+      // Convert file to base64
+      const arrayBuffer = await pdfFile.arrayBuffer();
+      const uint8Array = new Uint8Array(arrayBuffer);
+      const base64String = btoa(String.fromCharCode.apply(null, Array.from(uint8Array)));
 
-      console.log('File converted to base64, calling parse function...');
+      console.log('File converted to base64, length:', base64String.length);
+      console.log('Calling Supabase function...');
 
-      // Call the parse function with the file data
-      const { data: parseResult, error: parseError } = await supabase.functions
-        .invoke('parse-aws-invoice', {
-          body: {
-            fileData: base64,
-            fileName: pdfFile.name
-          }
-        });
+      // Call the parse function
+      const { data: result, error } = await supabase.functions.invoke('parse-aws-invoice', {
+        body: {
+          fileData: base64String,
+          fileName: pdfFile.name
+        }
+      });
 
-      console.log('Parse function response:', parseResult, parseError);
+      console.log('Supabase function response:', { result, error });
 
-      if (parseError) {
-        throw new Error('Failed to process invoice: ' + parseError.message);
+      if (error) {
+        console.error('Supabase function error:', error);
+        throw new Error(`Failed to process invoice: ${error.message}`);
       }
 
-      if (parseResult?.error) {
-        throw new Error(parseResult.error);
+      if (result?.error) {
+        console.error('Function returned error:', result.error);
+        throw new Error(result.error);
       }
 
+      console.log('Processing successful, extracted data:', result.data);
+      
+      // Success
       setIsProcessing(false);
       setUploadStatus('success');
-      onDataExtracted(parseResult.data);
-      console.log('File processed successfully');
+      onDataExtracted(result.data);
 
     } catch (error: any) {
-      console.error('Error processing file:', error);
+      console.error('Error during file processing:', error);
       setIsProcessing(false);
       setUploadStatus('error');
       setErrorMessage(error.message || 'An error occurred while processing the file');

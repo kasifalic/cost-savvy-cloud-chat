@@ -10,6 +10,7 @@ const corsHeaders = {
 const openAIApiKey = Deno.env.get('OPENAI_API_KEY');
 
 serve(async (req) => {
+  // Handle CORS preflight requests
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
   }
@@ -17,23 +18,47 @@ serve(async (req) => {
   try {
     console.log('Parse AWS invoice function called');
     
-    const requestBody = await req.json();
+    if (!openAIApiKey) {
+      console.error('OpenAI API key not configured');
+      return new Response(JSON.stringify({ 
+        error: 'OpenAI API key not configured' 
+      }), {
+        status: 500,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
+    let requestBody;
+    try {
+      requestBody = await req.json();
+    } catch (parseError) {
+      console.error('Failed to parse request body:', parseError);
+      return new Response(JSON.stringify({ 
+        error: 'Invalid request body' 
+      }), {
+        status: 400,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
     const { fileData, fileName } = requestBody;
     
     console.log('Received file:', fileName);
     
-    if (!openAIApiKey) {
-      console.error('OpenAI API key not configured');
-      throw new Error('OpenAI API key not configured');
-    }
-
     if (!fileData || !fileName) {
-      throw new Error('Missing file data or filename');
+      return new Response(JSON.stringify({ 
+        error: 'Missing file data or filename' 
+      }), {
+        status: 400,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
     }
 
     console.log('Calling OpenAI API for invoice parsing...');
 
-    // Use OpenAI to extract data from the PDF
+    // Limit the data size to prevent token overflow
+    const truncatedData = fileData.substring(0, 40000);
+
     const openAIResponse = await fetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
       headers: {
@@ -69,7 +94,7 @@ serve(async (req) => {
           },
           {
             role: 'user',
-            content: `Please analyze this AWS invoice PDF and extract the billing data. The file name is: ${fileName}. Here's a portion of the PDF content (base64): ${fileData.substring(0, 50000)}` // Limit size to prevent token overflow
+            content: `Please analyze this AWS invoice PDF and extract the billing data. The file name is: ${fileName}. Here's a portion of the PDF content (base64): ${truncatedData}`
           }
         ],
         max_tokens: 2000,
@@ -82,18 +107,28 @@ serve(async (req) => {
     if (!openAIResponse.ok) {
       const errorText = await openAIResponse.text();
       console.error('OpenAI API error:', errorText);
-      throw new Error(`OpenAI API error: ${openAIResponse.status} - ${errorText}`);
+      return new Response(JSON.stringify({ 
+        error: `OpenAI API error: ${openAIResponse.status}` 
+      }), {
+        status: 500,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
     }
 
     const openAIData = await openAIResponse.json();
     console.log('OpenAI response received');
     
     if (!openAIData.choices || !openAIData.choices[0]) {
-      throw new Error('Invalid response from OpenAI');
+      return new Response(JSON.stringify({ 
+        error: 'Invalid response from OpenAI' 
+      }), {
+        status: 500,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
     }
 
     const extractedContent = openAIData.choices[0].message.content;
-    console.log('Extracted content:', extractedContent.substring(0, 200) + '...');
+    console.log('Extracted content preview:', extractedContent.substring(0, 200));
     
     // Parse the JSON response
     let parsedData;
@@ -123,7 +158,7 @@ serve(async (req) => {
       };
     }
 
-    console.log('Returning parsed data:', parsedData);
+    console.log('Returning parsed data');
 
     return new Response(JSON.stringify({ 
       success: true, 
