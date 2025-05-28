@@ -9,6 +9,84 @@ const corsHeaders = {
 
 const openAIApiKey = Deno.env.get('OPENAI_API_KEY');
 
+// Function to extract text from PDF using a PDF parsing service
+async function extractTextFromPDF(base64Data: string): Promise<string> {
+  try {
+    console.log('Extracting text from PDF using PDF parsing service...');
+    
+    // Use pdf.co API for text extraction (free tier available)
+    const pdfCoResponse = await fetch('https://api.pdf.co/v1/pdf/convert/to/text', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': 'demo' // Using demo key for now, can be upgraded
+      },
+      body: JSON.stringify({
+        file: `data:application/pdf;base64,${base64Data}`,
+        pages: "1-10", // Extract first 10 pages to avoid too much data
+        async: false
+      })
+    });
+
+    if (!pdfCoResponse.ok) {
+      console.log('PDF.co API failed, falling back to alternative method...');
+      // Fallback: Try to decode and extract what we can from base64
+      return await fallbackTextExtraction(base64Data);
+    }
+
+    const pdfCoData = await pdfCoResponse.json();
+    console.log('PDF.co response received');
+    
+    if (pdfCoData.error || !pdfCoData.body) {
+      console.log('PDF.co returned error, using fallback...');
+      return await fallbackTextExtraction(base64Data);
+    }
+
+    const extractedText = pdfCoData.body;
+    console.log('Successfully extracted text, length:', extractedText.length);
+    
+    // Clean and limit the extracted text
+    const cleanedText = extractedText
+      .replace(/\s+/g, ' ') // Replace multiple spaces with single space
+      .replace(/\n\s*\n/g, '\n') // Remove empty lines
+      .trim();
+    
+    // Limit to 15000 characters to stay within token limits
+    const limitedText = cleanedText.substring(0, 15000);
+    console.log('Cleaned and limited text length:', limitedText.length);
+    
+    return limitedText;
+    
+  } catch (error) {
+    console.error('Error extracting text from PDF:', error);
+    return await fallbackTextExtraction(base64Data);
+  }
+}
+
+// Fallback method to extract some text indicators from PDF
+async function fallbackTextExtraction(base64Data: string): Promise<string> {
+  console.log('Using fallback text extraction method...');
+  
+  try {
+    // Convert base64 to text and look for readable content
+    const pdfText = atob(base64Data);
+    
+    // Extract text that looks like it might be from an AWS bill
+    const textMatches = pdfText.match(/[\x20-\x7E]{4,}/g) || [];
+    const readableText = textMatches
+      .filter(text => text.length > 3)
+      .join(' ')
+      .substring(0, 10000);
+    
+    console.log('Fallback extraction completed, text length:', readableText.length);
+    return readableText || 'Unable to extract readable text from PDF';
+    
+  } catch (error) {
+    console.error('Fallback extraction failed:', error);
+    return 'PDF text extraction failed';
+  }
+}
+
 serve(async (req) => {
   // Handle CORS preflight requests
   if (req.method === 'OPTIONS') {
@@ -59,12 +137,20 @@ serve(async (req) => {
 
     console.log('File data length:', fileData.length);
 
-    // Use more data for better extraction (100KB instead of 50KB)
-    const maxDataLength = 100000;
-    const truncatedData = fileData.substring(0, maxDataLength);
+    // Extract text from PDF first
+    const extractedText = await extractTextFromPDF(fileData);
     
-    console.log('Truncated data length:', truncatedData.length);
-    console.log('Calling OpenAI API for invoice parsing...');
+    if (!extractedText || extractedText.trim().length < 50) {
+      return new Response(JSON.stringify({ 
+        success: false,
+        error: 'Could not extract sufficient text from PDF. Please ensure the PDF contains readable AWS billing information.' 
+      }), {
+        status: 400,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
+    console.log('Calling OpenAI API with extracted text...');
 
     const openAIResponse = await fetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
@@ -77,18 +163,18 @@ serve(async (req) => {
         messages: [
           {
             role: 'system',
-            content: `You are an expert at extracting data from AWS billing invoices. You must extract the EXACT values from the PDF and return ONLY valid JSON without any markdown formatting or code blocks.
+            content: `You are an expert at extracting data from AWS billing invoices. You will receive extracted text from an AWS PDF invoice and must return ONLY valid JSON without any markdown formatting.
 
             Extract the following information and return it as valid JSON:
             {
               "totalCost": number (the exact total amount due from the invoice),
-              "costChange": number (percentage change from previous month if available, otherwise estimate),
+              "costChange": number (percentage change from previous month if available, otherwise 0),
               "billingPeriod": "YYYY-MM" (extract from the invoice date),
               "services": [
                 {
                   "name": "service name (e.g., EC2-Instance, Amazon S3, Amazon RDS)",
                   "cost": number (exact cost from invoice),
-                  "change": number (percentage change if available, otherwise estimate),
+                  "change": number (percentage change if available, otherwise 0),
                   "description": "brief description of the service"
                 }
               ],
@@ -99,11 +185,21 @@ serve(async (req) => {
               ]
             }
             
-            CRITICAL: Return ONLY the JSON object, no markdown, no code blocks, no additional text. The response must be valid JSON that can be parsed directly.`
+            CRITICAL RULES:
+            - Return ONLY the JSON object, no markdown, no code blocks, no additional text
+            - Extract EXACT values from the text provided
+            - If you cannot find exact values, return 0 for numbers and empty arrays for lists
+            - Do not guess or hallucinate data that is not clearly present in the text
+            - Focus on finding the main total cost and major service breakdowns`
           },
           {
             role: 'user',
-            content: `Extract the billing data from this AWS invoice PDF. Look for the total amount due, billing period, and service costs. File: ${fileName}. PDF content (base64): ${truncatedData}`
+            content: `Extract billing data from this AWS invoice text. Find the total amount due, billing period, and service costs. 
+
+            File: ${fileName}
+            
+            Extracted text from PDF:
+            ${extractedText}`
           }
         ],
         max_tokens: 2000,
@@ -167,10 +263,22 @@ serve(async (req) => {
       console.log('Attempting to extract data manually from raw content...');
       
       // Try to extract at least the total cost manually if JSON parsing fails
-      const totalMatch = extractedContent.match(/total[^:]*:\s*(\d+[\d,\.]*)/i);
-      const totalCost = totalMatch ? parseFloat(totalMatch[1].replace(/,/g, '')) : null;
+      const totalMatches = extractedText.match(/total[^:]*:?\s*\$?\s*([0-9,]+\.?[0-9]*)/gi);
+      const amountMatches = extractedText.match(/\$([0-9,]+\.?[0-9]*)/g);
       
-      if (totalCost) {
+      let totalCost = 0;
+      if (totalMatches && totalMatches.length > 0) {
+        const match = totalMatches[0].match(/([0-9,]+\.?[0-9]*)/);
+        if (match) {
+          totalCost = parseFloat(match[1].replace(/,/g, ''));
+        }
+      } else if (amountMatches && amountMatches.length > 0) {
+        // Find the largest dollar amount as likely total
+        const amounts = amountMatches.map(m => parseFloat(m.replace(/[\$,]/g, '')));
+        totalCost = Math.max(...amounts);
+      }
+      
+      if (totalCost > 0) {
         console.log('Extracted total cost manually:', totalCost);
         parsedData = {
           totalCost: totalCost,
@@ -186,8 +294,7 @@ serve(async (req) => {
           ]
         };
       } else {
-        // Last resort fallback
-        console.error('Could not extract any meaningful data, using fallback');
+        console.error('Could not extract any meaningful data');
         return new Response(JSON.stringify({ 
           success: false,
           error: 'Could not extract data from invoice. Please ensure the PDF contains AWS billing information.' 
