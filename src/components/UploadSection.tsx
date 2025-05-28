@@ -207,6 +207,10 @@ const UploadSection = ({ onDataExtracted }: UploadSectionProps) => {
     return processingMethod === 'vision' ? 'JPG, PNG images' : 'PDF files';
   };
 
+  const getMultipleAttribute = () => {
+    return processingMethod === 'vision';
+  };
+
   return (
     <div className="max-w-4xl mx-auto">
       {/* Hero Section */}
@@ -411,7 +415,7 @@ const UploadSection = ({ onDataExtracted }: UploadSectionProps) => {
                   ref={fileInputRef}
                   type="file"
                   accept={getAcceptedTypes()}
-                  multiple={processingMethod === 'vision'}
+                  multiple={getMultipleAttribute()}
                   onChange={handleFileInput}
                   className="hidden"
                 />
