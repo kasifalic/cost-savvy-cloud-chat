@@ -29,10 +29,10 @@ const Dashboard = ({ billData }: DashboardProps) => {
     <div className="max-w-7xl mx-auto space-y-8">
       {/* Header */}
       <div className="text-center mb-12">
-        <h1 className="text-4xl font-bold mb-4 bg-gradient-to-r from-white via-teal-100 to-orange-200 bg-clip-text text-transparent">
+        <h1 className="text-4xl font-bold mb-4 bg-gradient-to-r from-black via-gray-800 to-gray-600 bg-clip-text text-transparent">
           Cost Analysis Dashboard
         </h1>
-        <p className="text-gray-300">AI-powered insights into your AWS spending</p>
+        <p className="text-black">AI-powered insights into your AWS spending</p>
       </div>
 
       {/* Key Metrics */}
@@ -46,10 +46,10 @@ const Dashboard = ({ billData }: DashboardProps) => {
                 Current
               </span>
             </div>
-            <h3 className="text-3xl font-bold text-white mb-1">
+            <h3 className="text-3xl font-bold text-black mb-1">
               ${data.totalCost.toLocaleString()}
             </h3>
-            <p className="text-gray-300 text-sm">Total Monthly Cost</p>
+            <p className="text-black text-sm">Total Monthly Cost</p>
           </div>
         </div>
 
@@ -70,10 +70,10 @@ const Dashboard = ({ billData }: DashboardProps) => {
                 {data.costChange > 0 ? '+' : ''}{data.costChange}%
               </span>
             </div>
-            <h3 className="text-3xl font-bold text-white mb-1">
+            <h3 className="text-3xl font-bold text-black mb-1">
               {data.costChange > 0 ? '+' : ''}${Math.abs(data.costChange * 23).toFixed(0)}
             </h3>
-            <p className="text-gray-300 text-sm">vs Last Month</p>
+            <p className="text-black text-sm">vs Last Month</p>
           </div>
         </div>
 
@@ -86,10 +86,10 @@ const Dashboard = ({ billData }: DashboardProps) => {
                 Active
               </span>
             </div>
-            <h3 className="text-3xl font-bold text-white mb-1">
+            <h3 className="text-3xl font-bold text-black mb-1">
               {data.services.length}
             </h3>
-            <p className="text-gray-300 text-sm">AWS Services</p>
+            <p className="text-black text-sm">AWS Services</p>
           </div>
         </div>
 
@@ -102,10 +102,10 @@ const Dashboard = ({ billData }: DashboardProps) => {
                 Potential
               </span>
             </div>
-            <h3 className="text-3xl font-bold text-white mb-1">
+            <h3 className="text-3xl font-bold text-black mb-1">
               $450
             </h3>
-            <p className="text-gray-300 text-sm">Monthly Savings</p>
+            <p className="text-black text-sm">Monthly Savings</p>
           </div>
         </div>
       </div>
@@ -114,7 +114,7 @@ const Dashboard = ({ billData }: DashboardProps) => {
       <div className="relative">
         <div className="absolute inset-0 bg-gradient-to-r from-teal-500/5 to-orange-600/5 rounded-3xl blur-2xl"></div>
         <div className="relative backdrop-blur-xl bg-white/5 border border-white/10 rounded-3xl p-8">
-          <h2 className="text-2xl font-bold text-white mb-6 flex items-center gap-3">
+          <h2 className="text-2xl font-bold text-black mb-6 flex items-center gap-3">
             <Server className="h-6 w-6 text-teal-400" />
             Service Cost Breakdown
           </h2>
@@ -132,13 +132,13 @@ const Dashboard = ({ billData }: DashboardProps) => {
                           <Icon className="h-6 w-6 text-teal-400" />
                         </div>
                         <div>
-                          <h3 className="text-lg font-semibold text-white">{service.name}</h3>
-                          <p className="text-gray-300">Amazon {service.name}</p>
+                          <h3 className="text-lg font-semibold text-black">{service.name}</h3>
+                          <p className="text-black">Amazon {service.name}</p>
                         </div>
                       </div>
                       
                       <div className="text-right">
-                        <div className="text-2xl font-bold text-white">
+                        <div className="text-2xl font-bold text-black">
                           ${service.cost.toLocaleString()}
                         </div>
                         <div className={`flex items-center gap-1 ${
@@ -175,7 +175,7 @@ const Dashboard = ({ billData }: DashboardProps) => {
       <div className="relative">
         <div className="absolute inset-0 bg-gradient-to-r from-emerald-500/5 to-green-600/5 rounded-3xl blur-2xl"></div>
         <div className="relative backdrop-blur-xl bg-white/5 border border-white/10 rounded-3xl p-8">
-          <h2 className="text-2xl font-bold text-white mb-6 flex items-center gap-3">
+          <h2 className="text-2xl font-bold text-black mb-6 flex items-center gap-3">
             <Zap className="h-6 w-6 text-emerald-400" />
             AI Cost Optimization Recommendations
           </h2>
@@ -189,7 +189,7 @@ const Dashboard = ({ billData }: DashboardProps) => {
                     <div className="p-2 bg-emerald-500/20 rounded-lg mt-1">
                       <Zap className="h-4 w-4 text-emerald-400" />
                     </div>
-                    <p className="text-gray-300 flex-1">{rec}</p>
+                    <p className="text-black flex-1">{rec}</p>
                   </div>
                 </div>
               </div>

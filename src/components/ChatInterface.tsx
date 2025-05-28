@@ -20,7 +20,7 @@ const ChatInterface = ({ billData, apiKey }: ChatInterfaceProps) => {
     {
       id: '1',
       type: 'bot',
-      content: "Hi! I'm your AWS cost optimization assistant. I've analyzed your bill and I'm ready to help you understand your costs and find savings opportunities. What would you like to know?",
+      content: "Hi! I'm your AWS cost optimization assistant powered by Groq AI. I've analyzed your bill and I'm ready to help you understand your costs and find savings opportunities. What would you like to know?",
       timestamp: new Date()
     }
   ]);
@@ -47,30 +47,49 @@ const ChatInterface = ({ billData, apiKey }: ChatInterfaceProps) => {
     };
 
     setMessages(prev => [...prev, userMessage]);
+    const currentInput = inputValue;
     setInputValue('');
     setIsTyping(true);
 
-    // Simulate AI response
-    setTimeout(() => {
+    try {
+      // Call Groq AI via edge function
+      const response = await fetch('/api/chat-with-groq', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          message: currentInput,
+          billData: billData
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to get AI response');
+      }
+
+      const data = await response.json();
+      
       const botResponse: Message = {
         id: (Date.now() + 1).toString(),
         type: 'bot',
-        content: generateMockResponse(inputValue),
+        content: data.response,
         timestamp: new Date()
       };
+      
       setMessages(prev => [...prev, botResponse]);
+    } catch (error) {
+      console.error('Error calling Groq AI:', error);
+      const errorResponse: Message = {
+        id: (Date.now() + 1).toString(),
+        type: 'bot',
+        content: "I apologize, but I'm having trouble connecting to the AI service right now. Please try again later.",
+        timestamp: new Date()
+      };
+      setMessages(prev => [...prev, errorResponse]);
+    } finally {
       setIsTyping(false);
-    }, 2000);
-  };
-
-  const generateMockResponse = (query: string) => {
-    const responses = [
-      "Based on your AWS bill analysis, your highest cost service is EC2 at $1,240.50. I recommend considering Reserved Instances which could save you up to 30% on compute costs.",
-      "Your S3 costs have increased by 8.1% this month. Consider implementing lifecycle policies to automatically transition older objects to cheaper storage classes like IA or Glacier.",
-      "I notice you're spending $765.20 on RDS. You could potentially save $200/month by right-sizing your database instances based on actual utilization patterns.",
-      "Your Lambda usage shows great cost efficiency! The 15.3% increase is likely due to increased business value. Consider using Provisioned Concurrency for consistent performance if needed."
-    ];
-    return responses[Math.floor(Math.random() * responses.length)];
+    }
   };
 
   const suggestedQuestions = [
@@ -84,10 +103,10 @@ const ChatInterface = ({ billData, apiKey }: ChatInterfaceProps) => {
     <div className="max-w-6xl mx-auto h-[calc(100vh-12rem)]">
       {/* Header */}
       <div className="text-center mb-8">
-        <h1 className="text-4xl font-bold mb-4 bg-gradient-to-r from-white via-teal-100 to-orange-200 bg-clip-text text-transparent">
+        <h1 className="text-4xl font-bold mb-4 bg-gradient-to-r from-black via-gray-800 to-gray-600 bg-clip-text text-transparent">
           AI Cost Assistant
         </h1>
-        <p className="text-gray-300">Ask questions about your AWS bill and get intelligent insights</p>
+        <p className="text-black">Ask questions about your AWS bill and get intelligent insights powered by Groq AI</p>
       </div>
 
       <div className="relative h-full">
@@ -113,7 +132,7 @@ const ChatInterface = ({ billData, apiKey }: ChatInterfaceProps) => {
                 <div className={`max-w-md relative ${
                   message.type === 'user' 
                     ? 'bg-gradient-to-r from-teal-500 to-orange-600 text-white' 
-                    : 'backdrop-blur-xl bg-white/10 border border-white/10 text-gray-100'
+                    : 'backdrop-blur-xl bg-white/10 border border-white/10 text-black'
                 } rounded-2xl px-4 py-3 shadow-lg`}>
                   {message.type === 'user' && (
                     <div className="absolute inset-0 bg-gradient-to-r from-teal-500/20 to-orange-600/20 rounded-2xl blur-xl"></div>
@@ -126,7 +145,7 @@ const ChatInterface = ({ billData, apiKey }: ChatInterfaceProps) => {
 
                 {message.type === 'user' && (
                   <div className="p-3 bg-white/10 rounded-full border border-white/20">
-                    <User className="h-5 w-5 text-gray-300" />
+                    <User className="h-5 w-5 text-gray-600" />
                   </div>
                 )}
               </div>
@@ -155,7 +174,7 @@ const ChatInterface = ({ billData, apiKey }: ChatInterfaceProps) => {
           {/* Suggested Questions */}
           {messages.length <= 1 && (
             <div className="px-6 py-4 border-t border-white/10">
-              <p className="text-sm text-gray-300 mb-3 flex items-center gap-2">
+              <p className="text-sm text-black mb-3 flex items-center gap-2">
                 <Sparkles className="h-4 w-4" />
                 Try asking:
               </p>
@@ -164,7 +183,7 @@ const ChatInterface = ({ billData, apiKey }: ChatInterfaceProps) => {
                   <button
                     key={index}
                     onClick={() => setInputValue(question)}
-                    className="text-xs bg-white/5 hover:bg-white/10 border border-white/10 rounded-lg px-3 py-2 text-gray-300 hover:text-white transition-all duration-200"
+                    className="text-xs bg-white/5 hover:bg-white/10 border border-white/10 rounded-lg px-3 py-2 text-black hover:text-gray-800 transition-all duration-200"
                   >
                     {question}
                   </button>
@@ -183,7 +202,7 @@ const ChatInterface = ({ billData, apiKey }: ChatInterfaceProps) => {
                   onChange={(e) => setInputValue(e.target.value)}
                   onKeyPress={(e) => e.key === 'Enter' && handleSendMessage()}
                   placeholder="Ask about your AWS costs..."
-                  className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white placeholder-gray-400 focus:outline-none focus:border-teal-400 focus:bg-white/10 transition-all duration-200"
+                  className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-black placeholder-gray-500 focus:outline-none focus:border-teal-400 focus:bg-white/10 transition-all duration-200"
                 />
               </div>
               <Button
