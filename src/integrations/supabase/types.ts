@@ -48,42 +48,6 @@ export type Database = {
         }
         Relationships: []
       }
-      pdf_extractions: {
-        Row: {
-          extracted_at: string
-          extraction_method: string | null
-          file_size: number | null
-          filename: string
-          id: string
-          processed_at: string | null
-          processed_data: Json | null
-          processing_status: string | null
-          raw_text: string
-        }
-        Insert: {
-          extracted_at?: string
-          extraction_method?: string | null
-          file_size?: number | null
-          filename: string
-          id?: string
-          processed_at?: string | null
-          processed_data?: Json | null
-          processing_status?: string | null
-          raw_text: string
-        }
-        Update: {
-          extracted_at?: string
-          extraction_method?: string | null
-          file_size?: number | null
-          filename?: string
-          id?: string
-          processed_at?: string | null
-          processed_data?: Json | null
-          processing_status?: string | null
-          raw_text?: string
-        }
-        Relationships: []
-      }
     }
     Views: {
       [_ in never]: never
